@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
+import '../../pages/import/import_wizard_page.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/today_record_provider.dart';
 import '../../widgets/job_quantity_stepper.dart';
@@ -23,6 +25,22 @@ class HomePage extends ConsumerWidget {
       appBar: AppBar(
         title: Text('今日记账 · ${DateFormat('MM月dd日').format(DateTime.now())}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            tooltip: '导入 Excel',
+            onPressed: () async {
+              final picked = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['xlsx', 'xls', 'csv'],
+              );
+              final path = picked?.files.single.path;
+              if (path != null && context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ImportWizardPage(filePath: path)),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.content_copy),
             tooltip: '复制昨日',

@@ -27,6 +27,13 @@ dependencies:
   path_provider: ^2.1.0
   share_plus: ^9.0.0
 
+  # Excel 解析（导入微信分享的表格）
+  excel: ^4.0.6
+  # 接收微信/系统分享的文件
+  receive_sharing_intent: ^1.9.0
+  # App 内手动选择本地文件导入
+  file_picker: ^8.0.0
+
   # 工具库
   intl: ^0.19.0
 

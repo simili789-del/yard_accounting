@@ -40,4 +40,12 @@ class SettingsRepository {
   Future<void> setThemeMode(String mode) async {
     await _appBox.put('themeMode', mode);
   }
+
+  /// 「固定人员名单」：导入向导预勾用，避免每次手动勾选。
+  List<String> getFixedWorkers() =>
+      List<String>.from(_appBox.get('fixedWorkers', defaultValue: <String>[]));
+
+  Future<void> setFixedWorkers(List<String> workers) async {
+    await _appBox.put('fixedWorkers', workers);
+  }
 }

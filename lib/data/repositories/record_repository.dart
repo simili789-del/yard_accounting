@@ -28,6 +28,20 @@ class RecordRepository {
     await _box.put(_dateKey(record.date), record);
   }
 
+  /// 批量写入导入记录。使用「imp_日期_姓名」复合主键，与「今日记账」的纯日期
+  /// 主键空间隔离，多人同日互不覆盖；同一人同日重复导入即覆盖更新。
+  Future<void> saveImportedRecords(List<WorkRecord> records) async {
+    final map = <String, WorkRecord>{for (final r in records) r.id: r};
+    await _box.putAll(map);
+  }
+
+  /// 生成导入记录的复合主键：imp_年-月-日_姓名。
+  static String makeImportId(DateTime date, String name) {
+    final d = '${date.year}-${date.month.toString().padLeft(2, '0')}'
+        '-${date.day.toString().padLeft(2, '0')}';
+    return 'imp_${d}_$name';
+  }
+
   Future<void> deleteRecords(List<String> ids) async {
     await _box.deleteAll(ids);
   }
