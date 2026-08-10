@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,11 +14,13 @@ Future<void> main() async {
   // 因此测试前必须像 main() 一样初始化 Hive 并注册适配器、开箱，
   // 否则 Hive.box() 会抛 HiveError 导致 flutter test 失败、CI 不出包。
   //
-  // 注意：用 Hive.setUpTesting() 而非 Hive.initFlutter()——后者依赖
-  // path_provider 插件，单元测试环境无该插件实现会抛 MissingPluginException。
+  // 注意：不能用 Hive.initFlutter()——它内部调 path_provider 插件，
+  // 单元测试环境无该插件实现会抛 MissingPluginException。
+  // 改用 Hive.init() + 系统临时目录，纯 Dart 实现，无插件依赖。
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    Hive.setUpTesting();
+    final tempDir = await Directory.systemTemp.createTemp('hive_test_');
+    Hive.init(tempDir.path);
     if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(ShiftTypeAdapter());
     if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(WorkRecordAdapter());
     if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(SalarySettingsAdapter());
