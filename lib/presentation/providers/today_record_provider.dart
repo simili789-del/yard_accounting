@@ -28,13 +28,15 @@ class TodayRecordNotifier extends StateNotifier<AsyncValue<WorkRecord>> {
     }
   }
 
-  void updateBasicInfo({String? workerName, String? vehicleNo, ShiftType? shift}) {
+  void updateBasicInfo(
+      {String? workerName, String? vehicleNo, ShiftType? shift, String? boatName}) {
     final current = state.value;
     if (current == null) return;
     state = AsyncData(current.copyWith(
       workerName: workerName,
       vehicleNo: vehicleNo,
       shift: shift,
+      boatName: boatName,
     ));
   }
 
@@ -61,6 +63,7 @@ class TodayRecordNotifier extends StateNotifier<AsyncValue<WorkRecord>> {
     state = AsyncData(current.copyWith(
       workerName: yesterday.workerName,
       vehicleNo: yesterday.vehicleNo,
+      boatName: yesterday.boatName,
       shift: yesterday.shift,
       jobQuantities: Map<String, int>.from(yesterday.jobQuantities),
     ));

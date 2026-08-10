@@ -207,6 +207,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         shift: state.shift,
         jobQuantities: Map<String, int>.from(row.quantities),
         remark: row.remark,
+        boatName: row.boatName,
       ));
     }
     await repo.saveImportedRecords(records);

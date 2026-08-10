@@ -91,7 +91,10 @@ class HistoryPage extends ConsumerWidget {
                                     ? r.workerName[0]
                                     : '?'),
                               ),
-                        title: Text('${r.workerName} · ${r.vehicleNo}'),
+                        title: Text(
+                          '${r.workerName} · ${r.vehicleNo}'
+                          '${r.boatName != null && r.boatName!.isNotEmpty ? ' · ${r.boatName}' : ''}',
+                        ),
                         subtitle: Text(
                           '${DateFormat('yyyy-MM-dd').format(r.date)} · ${r.shift.label} · '
                           '${r.jobQuantities.values.fold<int>(0, (a, b) => a + b)} 件',

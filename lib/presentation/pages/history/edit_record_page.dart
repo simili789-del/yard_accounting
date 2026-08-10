@@ -19,6 +19,7 @@ class EditRecordPage extends ConsumerStatefulWidget {
 class _EditRecordPageState extends ConsumerState<EditRecordPage> {
   late String _workerName;
   late String _vehicleNo;
+  late String _boatName;
   late ShiftType _shift;
   late Map<String, int> _jobQuantities;
   late String _remark;
@@ -28,6 +29,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     super.initState();
     _workerName = widget.record.workerName;
     _vehicleNo = widget.record.vehicleNo;
+    _boatName = widget.record.boatName ?? '';
     _shift = widget.record.shift;
     _jobQuantities = Map<String, int>.from(widget.record.jobQuantities);
     _remark = widget.record.remark ?? '';
@@ -73,6 +75,14 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
                   initialValue: _vehicleNo,
                   decoration: const InputDecoration(labelText: '车号'),
                   onChanged: (v) => _vehicleNo = v,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: _boatName,
+                  decoration: const InputDecoration(labelText: '船名'),
+                  onChanged: (v) => _boatName = v,
                 ),
               ),
             ],
@@ -136,6 +146,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
       shift: _shift,
       jobQuantities: _jobQuantities,
       remark: _remark,
+      boatName: _boatName.isEmpty ? null : _boatName,
     );
     ref.read(recordRepositoryProvider).saveRecord(updated);
     ScaffoldMessenger.of(context).showSnackBar(

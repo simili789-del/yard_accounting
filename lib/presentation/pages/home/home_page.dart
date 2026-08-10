@@ -113,6 +113,12 @@ class _HomeForm extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 12),
+        TextFormField(
+          initialValue: record.boatName ?? '',
+          decoration: const InputDecoration(labelText: '船名'),
+          onChanged: (v) => notifier.updateBasicInfo(boatName: v),
+        ),
+        const SizedBox(height: 12),
         SegmentedButton<ShiftType>(
           segments: const [
             ButtonSegment(value: ShiftType.day, label: Text('白班')),

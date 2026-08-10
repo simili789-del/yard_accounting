@@ -66,7 +66,8 @@ class RecordRepository {
       if (keyword != null && keyword.isNotEmpty) {
         final k = keyword.toLowerCase();
         if (!r.workerName.toLowerCase().contains(k) &&
-            !r.vehicleNo.toLowerCase().contains(k)) {
+            !r.vehicleNo.toLowerCase().contains(k) &&
+            !(r.boatName?.toLowerCase().contains(k) ?? false)) {
           return false;
         }
       }

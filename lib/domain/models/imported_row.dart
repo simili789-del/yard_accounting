@@ -6,12 +6,14 @@ class ImportedRow {
   final String workerName;
   final String vehicleNo;
   final String? remark;
+  final String? boatName; // 船名（挖掘机绩效等场景，可选；空即空，不继承）
   final Map<String, int> quantities; // 清洗后的作业类型名 -> 车数
 
   ImportedRow({
     required this.workerName,
     required this.vehicleNo,
     this.remark,
+    this.boatName,
     required this.quantities,
   });
 }

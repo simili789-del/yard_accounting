@@ -41,6 +41,10 @@ class WorkRecord extends HiveObject {
   @HiveField(6)
   final String? remark;
 
+  /// 船名（挖掘机绩效等场景的归属船，可选）。
+  @HiveField(7)
+  final String? boatName;
+
   WorkRecord({
     required this.id,
     required this.date,
@@ -49,6 +53,7 @@ class WorkRecord extends HiveObject {
     required this.shift,
     required this.jobQuantities,
     this.remark,
+    this.boatName,
   });
 
   WorkRecord copyWith({
@@ -59,6 +64,7 @@ class WorkRecord extends HiveObject {
     ShiftType? shift,
     Map<String, int>? jobQuantities,
     String? remark,
+    String? boatName,
   }) {
     return WorkRecord(
       id: id ?? this.id,
@@ -68,6 +74,7 @@ class WorkRecord extends HiveObject {
       shift: shift ?? this.shift,
       jobQuantities: jobQuantities ?? this.jobQuantities,
       remark: remark ?? this.remark,
+      boatName: boatName ?? this.boatName,
     );
   }
 

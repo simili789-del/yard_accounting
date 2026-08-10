@@ -386,6 +386,8 @@ class _WorkerList extends ConsumerWidget {
                 subtitle: Text(
                   [
                     if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
+                    if (row.boatName != null && row.boatName!.isNotEmpty)
+                      '船名 ${row.boatName}',
                     qty,
                     if (disabled) '非名单人员（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),

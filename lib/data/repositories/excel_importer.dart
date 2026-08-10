@@ -21,6 +21,9 @@ class ExcelParseResult {
   final DateTime? date;
   final ShiftType shift;
 
+  /// 船名列（可选；挖掘机绩效表的船名常在表头为空的 A 列）。
+  final int? boatCol;
+
   /// 清洗前的原始作业类型列名（用于「模板记忆」指纹匹配）。
   final List<String> rawJobColumns;
 
@@ -35,6 +38,7 @@ class ExcelParseResult {
     this.nameCol,
     this.vehCol,
     this.remarkCol,
+    this.boatCol,
     required this.jobColumns,
     required this.rows,
     this.date,
@@ -77,7 +81,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
 
   // 2) 归类列：姓名 / 车号 / 备注 单列标记，其余数值列作为作业类型列
   final headerCells = rows[headerIdx];
-  int? nameCol, vehCol, remarkCol;
+  int? nameCol, vehCol, remarkCol, boatCol;
   final jobCols = <int, CleanedColumn>{};
   final rawJobCols = <int, String>{};
   for (int c = 0; c < headerCells.length; c++) {
@@ -95,11 +99,37 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       remarkCol = c;
       continue;
     }
+    if (h.contains('船名') || h.contains('船号')) {
+      boatCol = c;
+      continue;
+    }
     jobCols[c] = _cleanColumn(h);
     rawJobCols[c] = h;
   }
   if (nameCol == null) {
     throw Exception('表头中未找到「姓名」列，请检查表头行是否正确');
+  }
+  // 船名特例：挖掘机绩效表的船名在「表头为空的列」（如 A 列），且数据行多为文本。
+  if (boatCol == null) {
+    for (int c = 0; c < headerCells.length; c++) {
+      final h = _text(headerCells[c]) ?? '';
+      if (h.isNotEmpty) continue;
+      if (c == nameCol || c == vehCol || c == remarkCol || jobCols.containsKey(c)) {
+        continue;
+      }
+      var texty = false;
+      for (int r = headerIdx + 1; r < rows.length; r++) {
+        final v = _text(rows[r][c]);
+        if (v != null && v.isNotEmpty && !_isNumericLike(v)) {
+          texty = true;
+          break;
+        }
+      }
+      if (texty) {
+        boatCol = c;
+        break;
+      }
+    }
   }
 
   // 3) 解析班次与日期（取自表头上一行的 meta 行）
@@ -123,12 +153,25 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
   }
 
-  // 4) 逐行提取人员车数，跳过空行/标题行；含「合计」的行作为对账基准提取
+  // 4) 逐行提取人员车数；空姓名行可能是「合计行/说明行/空行」，需区分
   final result = <ImportedRow>[];
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
     final name = _text(rows[r][nameCol]) ?? '';
-    if (name.isEmpty) continue;
+    if (name.isEmpty) {
+      // 合计行特征：车号列也空 且 至少一个作业列有值（铲车表合计行即如此）
+      final hasJob = jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0);
+      final vehEmpty = vehCol == null || (_text(rows[r][vehCol])?.isEmpty ?? true);
+      if (hasJob && vehEmpty) {
+        final totals = <String, int>{};
+        for (final e in jobCols.entries) {
+          final v = _toInt(rows[r][e.key]);
+          if (v != null && v > 0) totals[e.value.name] = v;
+        }
+        if (totals.isNotEmpty) sheetTotals = totals;
+      }
+      continue;
+    }
     if (name.contains('制表')) continue;
     if (name.contains('合计')) {
       final totals = <String, int>{};
@@ -147,10 +190,12 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
     if (quantities.isEmpty) continue; // 该行无任何车数
 
+    final rawBoat = boatCol != null ? _text(rows[r][boatCol]) : null;
     result.add(ImportedRow(
       workerName: name,
       vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
       remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+      boatName: (rawBoat != null && rawBoat.isNotEmpty) ? rawBoat : null,
       quantities: quantities,
     ));
   }
@@ -162,6 +207,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     nameCol: nameCol,
     vehCol: vehCol,
     remarkCol: remarkCol,
+    boatCol: boatCol,
     jobColumns: jobCols.values.toList(),
     rows: result,
     date: date,
@@ -191,6 +237,12 @@ int? _toInt(dynamic cell) {
   if (v is double) return v.round();
   if (v is String) return int.tryParse(v.trim());
   return null;
+}
+
+/// 是否像数字（用于区分船名文本与「加高12000」之类的说明数字）。
+bool _isNumericLike(String s) {
+  final cleaned = s.replaceAll(RegExp(r'[，,\s/]'), '');
+  return double.tryParse(cleaned) != null;
 }
 
 /// 清洗列名：剥离结尾的「(可选逗号) 数字 元」，提取单价。
