@@ -29,6 +29,3 @@ workflows:
       email:
         recipients:
           - team@yard-accounting.com
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
