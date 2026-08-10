@@ -9,7 +9,5 @@ analyzer:
     strict-casts: false
     strict-raw-types: false
 
-linter:
-  rules:
-    # 关闭资源目录不存在的 warning（assets/images/ 当前为空目录占位）
-    asset_directory_does_not_exist: false
+# 注意：assets/images/ 的 asset_directory_does_not_exist 警告
+# 已通过注释掉 pubspec.yaml 的 assets 声明解决，无需在此配置 lint 规则。
