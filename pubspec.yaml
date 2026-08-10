@@ -29,8 +29,8 @@ dependencies:
 
   # Excel 解析（导入微信分享的表格）
   excel: ^4.0.6
-  # 接收微信/系统分享的文件
-  receive_sharing_intent: ^1.9.0
+  # 接收微信/系统分享的文件（1.8.x 兼容 Dart 3.5.4 / Flutter 3.24.5；1.9.0 起要求 Dart>=3.10）
+  receive_sharing_intent: ^1.8.1
   # App 内手动选择本地文件导入
   file_picker: ^8.0.0
 
