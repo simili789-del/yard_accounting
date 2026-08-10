@@ -48,7 +48,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            // 仅当存在签名密钥（CodeMagic 环境变量或本地 key.properties）时才用 release 签名；
+            // 否则回退到 debug 签名，保证未配置密钥时测试包也能正常构建并安装。
+            def hasKeystore = System.getenv("KEYSTORE_PATH") != null || keystoreProperties['storeFile'] != null
+            signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
