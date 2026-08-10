@@ -8,9 +8,8 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsRepo = ref.watch(settingsRepositoryProvider);
-    final unitPrices = settingsRepo.getUnitPrices();
-    final salary = settingsRepo.getSalarySettings();
+    final unitPrices = ref.watch(unitPricesProvider);
+    final salary = ref.watch(salarySettingsProvider);
     final themeMode = ref.watch(themeModeProvider);
 
     return Scaffold(
@@ -18,21 +17,39 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: [
           const _SectionHeader('作业类型单价配置'),
-          ...unitPrices.entries.map((e) => ListTile(
-                title: Text(e.key),
-                trailing: SizedBox(
-                  width: 100,
-                  child: TextFormField(
-                    initialValue: e.value.toStringAsFixed(2),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(prefixText: '¥'),
-                    onFieldSubmitted: (v) {
-                      final price = double.tryParse(v) ?? e.value;
-                      settingsRepo.setUnitPrice(e.key, price);
-                    },
+          ...unitPrices.entries.map((e) => Dismissible(
+                key: Key(e.key),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (_) {
+                  ref.read(unitPricesProvider.notifier).remove(e.key);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('已删除「${e.key}」')),
+                  );
+                },
+                child: ListTile(
+                  title: Text(e.key),
+                  trailing: SizedBox(
+                    width: 100,
+                    child: TextFormField(
+                      initialValue: e.value.toStringAsFixed(2),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(prefixText: '¥'),
+                      onFieldSubmitted: (v) {
+                        final price = double.tryParse(v) ?? e.value;
+                        ref
+                            .read(unitPricesProvider.notifier)
+                            .setPrice(e.key, price);
+                      },
+                    ),
                   ),
                 ),
-                onLongPress: () => settingsRepo.removeJobType(e.key),
               )),
           ListTile(
             leading: const Icon(Icons.add),
@@ -44,23 +61,23 @@ class SettingsPage extends ConsumerWidget {
           _NumberField(
             label: '底薪',
             value: salary.baseSalary,
-            onChanged: (v) => settingsRepo.saveSalarySettings(
-              salary.copyWith(baseSalary: v),
-            ),
+            onChanged: (v) => ref
+                .read(salarySettingsProvider.notifier)
+                .update(salary.copyWith(baseSalary: v)),
           ),
           _NumberField(
             label: '餐补',
             value: salary.mealAllowance,
-            onChanged: (v) => settingsRepo.saveSalarySettings(
-              salary.copyWith(mealAllowance: v),
-            ),
+            onChanged: (v) => ref
+                .read(salarySettingsProvider.notifier)
+                .update(salary.copyWith(mealAllowance: v)),
           ),
           _NumberField(
             label: '扣款',
             value: salary.deduction,
-            onChanged: (v) => settingsRepo.saveSalarySettings(
-              salary.copyWith(deduction: v),
-            ),
+            onChanged: (v) => ref
+                .read(salarySettingsProvider.notifier)
+                .update(salary.copyWith(deduction: v)),
           ),
           const Divider(),
           const _SectionHeader('主题'),
@@ -109,7 +126,8 @@ class SettingsPage extends ConsumerWidget {
             TextField(
               controller: priceCtrl,
               decoration: const InputDecoration(labelText: '单价'),
-              keyboardType: TextInputType.number,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
             ),
           ],
         ),
@@ -123,7 +141,10 @@ class SettingsPage extends ConsumerWidget {
               final name = nameCtrl.text.trim();
               final price = double.tryParse(priceCtrl.text) ?? 0;
               if (name.isNotEmpty) {
-                ref.read(settingsRepositoryProvider).setUnitPrice(name, price);
+                ref.read(unitPricesProvider.notifier).add(name, price);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('已添加「$name」')),
+                );
               }
               Navigator.pop(context);
             },
@@ -167,7 +188,7 @@ class _NumberField extends StatelessWidget {
         width: 120,
         child: TextFormField(
           initialValue: value.toStringAsFixed(2),
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(prefixText: '¥'),
           onFieldSubmitted: (v) => onChanged(double.tryParse(v) ?? value),
         ),

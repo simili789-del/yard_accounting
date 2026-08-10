@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../domain/entities/work_record.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
+import 'edit_record_page.dart';
 
 class HistoryPage extends ConsumerWidget {
   const HistoryPage({super.key});
@@ -31,13 +32,9 @@ class HistoryPage extends ConsumerWidget {
               },
             ),
           IconButton(
-            icon: const Icon(Icons.ios_share),
+            icon: const Icon(Icons.file_download_outlined),
             tooltip: '导出 CSV',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已生成 CSV，可通过分享菜单发送')),
-              );
-            },
+            onPressed: () => _exportCsv(context, ref, records),
           ),
         ],
       ),
@@ -63,7 +60,7 @@ class HistoryPage extends ConsumerWidget {
             child: TextField(
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: '按姓名 / 车号搜索，班次筛选见右上角',
+                hintText: '按姓名 / 车号搜索',
               ),
               onChanged: (v) => ref
                   .read(historyFilterProvider.notifier)
@@ -79,19 +76,39 @@ class HistoryPage extends ConsumerWidget {
                     itemBuilder: (context, i) {
                       final r = records[i];
                       final isSelected = selected.contains(r.id);
-                      return CheckboxListTile(
-                        value: isSelected,
-                        onChanged: (_) {
-                          final next = Set<String>.from(selected);
-                          isSelected ? next.remove(r.id) : next.add(r.id);
-                          ref.read(selectedRecordIdsProvider.notifier).state =
-                              next;
-                        },
+                      return ListTile(
+                        leading: isSelected
+                            ? Checkbox(
+                                value: true,
+                                onChanged: (_) =>
+                                    _toggleSelect(ref, selected, r.id),
+                              )
+                            : CircleAvatar(
+                                backgroundColor: r.shift == ShiftType.night
+                                    ? Colors.indigo.shade100
+                                    : Colors.green.shade100,
+                                child: Text(r.workerName.isNotEmpty
+                                    ? r.workerName[0]
+                                    : '?'),
+                              ),
                         title: Text('${r.workerName} · ${r.vehicleNo}'),
                         subtitle: Text(
                           '${DateFormat('yyyy-MM-dd').format(r.date)} · ${r.shift.label} · '
                           '${r.jobQuantities.values.fold<int>(0, (a, b) => a + b)} 件',
                         ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditRecordPage(record: r),
+                            ),
+                          );
+                          // 返回后刷新列表
+                          ref.invalidate(historyRecordsProvider);
+                        },
+                        onLongPress: () =>
+                            _toggleSelect(ref, selected, r.id),
                       );
                     },
                   ),
@@ -99,6 +116,12 @@ class HistoryPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _toggleSelect(WidgetRef ref, Set<String> selected, String id) {
+    final next = Set<String>.from(selected);
+    selected.contains(id) ? next.remove(id) : next.add(id);
+    ref.read(selectedRecordIdsProvider.notifier).state = next;
   }
 
   String _rangeLabel(QuickRange r) {
@@ -112,5 +135,12 @@ class HistoryPage extends ConsumerWidget {
       case QuickRange.custom:
         return '自定义';
     }
+  }
+
+  void _exportCsv(BuildContext context, WidgetRef ref, List<WorkRecord> records) {
+    // TODO: 实现真实CSV导出
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('CSV 导出功能开发中')),
+    );
   }
 }

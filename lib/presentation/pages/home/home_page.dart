@@ -14,7 +14,7 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recordAsync = ref.watch(todayRecordProvider);
-    final unitPrices = ref.watch(settingsRepositoryProvider).getUnitPrices();
+    final unitPrices = ref.watch(unitPricesProvider);
     final jobTypes = unitPrices.keys.isNotEmpty
         ? unitPrices.keys.toList()
         : DefaultJobTypes.types;

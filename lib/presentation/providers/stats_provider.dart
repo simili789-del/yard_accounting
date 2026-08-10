@@ -26,9 +26,8 @@ final statsMonthProvider = StateProvider<DateTime>((ref) {
 
 final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
   final repository = ref.watch(recordRepositoryProvider);
-  final settingsRepository = ref.watch(settingsRepositoryProvider);
+  final unitPrices = ref.watch(unitPricesProvider);
   final month = ref.watch(statsMonthProvider);
-  final unitPrices = settingsRepository.getUnitPrices();
 
   final start = DateTime(month.year, month.month, 1);
   final end = DateTime(month.year, month.month + 1, 0);

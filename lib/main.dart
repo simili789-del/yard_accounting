@@ -9,6 +9,14 @@ import 'domain/entities/work_record.dart';
 import 'presentation/providers/repository_providers.dart';
 import 'presentation/root_shell.dart';
 
+/// 首次启动默认作业类型单价
+const _defaultPrices = {
+  '装车': 1.0,
+  '卸车': 1.0,
+  '倒货': 0.8,
+  '理货': 0.5,
+};
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -34,6 +42,14 @@ Future<void> main() async {
       Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
       Hive.openBox(HiveBoxes.appSettings),
     ]);
+
+    // 首次启动：初始化默认作业类型单价（box 为空时写入）
+    final priceBox = Hive.box(HiveBoxes.jobPrices);
+    if (priceBox.isEmpty) {
+      for (final entry in _defaultPrices.entries) {
+        await priceBox.put(entry.key, entry.value);
+      }
+    }
 
     runApp(const ProviderScope(child: YardAccountingApp()));
   }, (error, stack) {
