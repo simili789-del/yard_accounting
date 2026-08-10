@@ -19,8 +19,8 @@ workflows:
         script: flutter analyze
       - name: Run tests
         script: flutter test
-      - name: Build APK
-        script: flutter build apk --release
+      - name: Build APK (split per ABI)
+        script: flutter build apk --release --split-per-abi
     artifacts:
       - build/**/outputs/**/*.apk
       - build/**/outputs/**/*.aab
