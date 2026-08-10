@@ -14,7 +14,7 @@ class AppTheme {
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-        cardTheme: const CardThemeData(
+        cardTheme: const CardTheme(
           elevation: 1,
           margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         ),
@@ -32,7 +32,7 @@ class AppTheme {
           brightness: Brightness.dark,
         ),
         appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-        cardTheme: const CardThemeData(
+        cardTheme: const CardTheme(
           elevation: 1,
           margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         ),
