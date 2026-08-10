@@ -12,19 +12,48 @@ import 'presentation/root_shell.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Hive.initFlutter();
-  Hive.registerAdapter(ShiftTypeAdapter());
-  Hive.registerAdapter(WorkRecordAdapter());
-  Hive.registerAdapter(SalarySettingsAdapter());
+  // 捕获异步异常，避免初始化失败时白屏无任何提示
+  runZonedGuarded(() async {
+    await Hive.initFlutter();
 
-  await Future.wait([
-    Hive.openBox<WorkRecord>(HiveBoxes.records),
-    Hive.openBox(HiveBoxes.jobPrices),
-    Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
-    Hive.openBox(HiveBoxes.appSettings),
-  ]);
+    // 注册适配器（防重复注册）
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(WorkRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(ShiftTypeAdapter());
+    }
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(SalarySettingsAdapter());
+    }
 
-  runApp(const ProviderScope(child: YardAccountingApp()));
+    // 确保所有 Box 打开完成后再启动 App
+    await Future.wait([
+      Hive.openBox<WorkRecord>(HiveBoxes.records),
+      Hive.openBox(HiveBoxes.jobPrices),
+      Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
+      Hive.openBox(HiveBoxes.appSettings),
+    ]);
+
+    runApp(const ProviderScope(child: YardAccountingApp()));
+  }, (error, stack) {
+    // 初始化失败也启动 App，展示错误页而非白屏
+    debugPrint('初始化失败: $error\n$stack');
+    runApp(MaterialApp(
+      home: Material(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              '初始化失败：$error\n\n请重启 App，如持续失败请反馈此信息。',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red, fontSize: 14),
+            ),
+          ),
+        ),
+      ),
+    ));
+  });
 }
 
 class YardAccountingApp extends ConsumerWidget {
