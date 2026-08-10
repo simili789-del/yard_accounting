@@ -44,6 +44,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/
+  # assets/images/ 当前无资源，暂不声明，避免 analyze 报 asset_directory_does_not_exist
+  # 如后续放入图片资源，恢复下面这行即可：
+  # assets:
+  #   - assets/images/
   fonts: []
