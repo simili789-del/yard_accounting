@@ -21,6 +21,13 @@ class ExcelParseResult {
   final DateTime? date;
   final ShiftType shift;
 
+  /// 清洗前的原始作业类型列名（用于「模板记忆」指纹匹配）。
+  final List<String> rawJobColumns;
+
+  /// 表格里的「合计」行（清洗后列名 -> 车数合计），作为导入对账基准。
+  /// 没有合计行时为 null。
+  final Map<String, int>? sheetTotals;
+
   ExcelParseResult({
     required this.sheetNames,
     required this.sheetName,
@@ -32,6 +39,8 @@ class ExcelParseResult {
     required this.rows,
     this.date,
     required this.shift,
+    this.rawJobColumns = const [],
+    this.sheetTotals,
   });
 }
 
@@ -70,6 +79,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final headerCells = rows[headerIdx];
   int? nameCol, vehCol, remarkCol;
   final jobCols = <int, CleanedColumn>{};
+  final rawJobCols = <int, String>{};
   for (int c = 0; c < headerCells.length; c++) {
     final h = _text(headerCells[c]) ?? '';
     if (h.isEmpty) continue;
@@ -86,6 +96,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       continue;
     }
     jobCols[c] = _cleanColumn(h);
+    rawJobCols[c] = h;
   }
   if (nameCol == null) {
     throw Exception('表头中未找到「姓名」列，请检查表头行是否正确');
@@ -112,12 +123,22 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
   }
 
-  // 4) 逐行提取人员车数，跳过空行/合计行/标题行
+  // 4) 逐行提取人员车数，跳过空行/标题行；含「合计」的行作为对账基准提取
   final result = <ImportedRow>[];
+  Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
     final name = _text(rows[r][nameCol]) ?? '';
     if (name.isEmpty) continue;
-    if (name.contains('合计') || name.contains('制表')) continue;
+    if (name.contains('制表')) continue;
+    if (name.contains('合计')) {
+      final totals = <String, int>{};
+      for (final e in jobCols.entries) {
+        final v = _toInt(rows[r][e.key]);
+        if (v != null && v > 0) totals[e.value.name] = v;
+      }
+      if (totals.isNotEmpty) sheetTotals = totals;
+      continue;
+    }
 
     final quantities = <String, int>{};
     for (final e in jobCols.entries) {
@@ -145,6 +166,8 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     rows: result,
     date: date,
     shift: shift,
+    rawJobColumns: rawJobCols.values.toList(),
+    sheetTotals: sheetTotals,
   );
 }
 

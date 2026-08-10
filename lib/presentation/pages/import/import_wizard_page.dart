@@ -89,7 +89,14 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
           },
         ),
         const SizedBox(height: 8),
-        _MappingPreview(result),
+        _MappingPreview(result, templateMatched: state.templateMatched),
+        const SizedBox(height: 8),
+        if (result.sheetTotals != null)
+          _ReconcilePanel(
+            result: result,
+            computed: ref.read(importProvider.notifier).computedTotals,
+            mismatches: ref.read(importProvider.notifier).mismatches,
+          ),
         const SizedBox(height: 12),
         _DateShiftTile(
           date: state.date,
@@ -98,6 +105,14 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
           onShift: (s) => ref.read(importProvider.notifier).setShift(s),
         ),
         const SizedBox(height: 12),
+        if (state.fixedWorkers.isNotEmpty)
+          SwitchListTile(
+            title: const Text('仅导入固定人员名单内的人'),
+            subtitle: const Text('关闭后可导入名单外的新人'),
+            value: state.enforceFixed,
+            onChanged: (v) =>
+                ref.read(importProvider.notifier).setEnforceFixed(v),
+          ),
         _WorkerList(state),
         const SizedBox(height: 80),
       ],
@@ -161,7 +176,8 @@ class _HeaderRowTile extends StatelessWidget {
 
 class _MappingPreview extends StatelessWidget {
   final ExcelParseResult result;
-  const _MappingPreview(this.result);
+  final bool templateMatched;
+  const _MappingPreview(this.result, {this.templateMatched = false});
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +187,19 @@ class _MappingPreview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('识别到的列', style: Theme.of(context).textTheme.titleSmall),
+            Row(
+              children: [
+                Text('识别到的列', style: Theme.of(context).textTheme.titleSmall),
+                const Spacer(),
+                if (templateMatched)
+                  Chip(
+                    label: const Text('已识别常用模板'),
+                    avatar: const Icon(Icons.auto_awesome, size: 18),
+                    backgroundColor:
+                        Theme.of(context).colorScheme.tertiaryContainer,
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -189,6 +217,77 @@ class _MappingPreview extends StatelessWidget {
                     )),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReconcilePanel extends StatelessWidget {
+  final ExcelParseResult result;
+  final Map<String, int> computed;
+  final List<String> mismatches;
+  const _ReconcilePanel({
+    required this.result,
+    required this.computed,
+    required this.mismatches,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totals = result.sheetTotals!;
+    final cols = totals.keys.toList();
+    final hasMismatch = mismatches.isNotEmpty;
+    return Card(
+      color: hasMismatch ? Theme.of(context).colorScheme.errorContainer : null,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(hasMismatch ? Icons.warning_amber : Icons.check_circle,
+                    color: hasMismatch ? Colors.red : Colors.green),
+                const SizedBox(width: 6),
+                Text(
+                  hasMismatch ? '对账不一致！' : '对账一致',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: hasMismatch ? Colors.red : Colors.green,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              hasMismatch
+                  ? '勾选人员的车数合计与表格「合计」行不符，可能存在漏录，请核对后再导入'
+                  : '勾选人员车数合计已与表格「合计」行完全一致',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            ...cols.map((col) {
+              final t = totals[col]!;
+              final c = computed[col] ?? 0;
+              final bad = t != c;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(col)),
+                    Text('表格 $t',
+                        style: TextStyle(color: bad ? Colors.red : null)),
+                    const SizedBox(width: 12),
+                    Text('已选 $c',
+                        style: TextStyle(
+                          color: bad ? Colors.red : null,
+                          fontWeight: bad ? FontWeight.bold : null,
+                        )),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
       ),
@@ -249,6 +348,7 @@ class _WorkerList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final result = state.result!;
     final allSelected = state.selectedWorkers.length == result.rows.length;
+    final fixedSet = state.fixedWorkers.toSet();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -270,18 +370,25 @@ class _WorkerList extends ConsumerWidget {
             const SizedBox(height: 4),
             ...result.rows.map((row) {
               final selected = state.selectedWorkers.contains(row.workerName);
+              final inFixed = fixedSet.contains(row.workerName);
+              final disabled = state.enforceFixed && !inFixed;
               final qty = row.quantities.entries
                   .map((e) => '${e.key}:${e.value}')
                   .join('  ');
               return CheckboxListTile(
                 value: selected,
-                onChanged: (v) =>
-                    ref.read(importProvider.notifier).toggleWorker(row.workerName, v ?? false),
+                onChanged: disabled
+                    ? null
+                    : (v) => ref
+                        .read(importProvider.notifier)
+                        .toggleWorker(row.workerName, v ?? false),
                 title: Text(row.workerName),
                 subtitle: Text(
-                  [if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}', qty]
-                      .where((s) => s.isNotEmpty)
-                      .join('  ·  '),
+                  [
+                    if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
+                    qty,
+                    if (disabled) '非名单人员（关闭上方开关可导入）',
+                  ].where((s) => s.isNotEmpty).join('  ·  '),
                 ),
               );
             }),
@@ -294,12 +401,19 @@ class _WorkerList extends ConsumerWidget {
                 onPressed: state.selectedWorkers.isEmpty
                     ? null
                     : () async {
-                        await ref.read(importProvider.notifier).confirm();
-                        final count = ref.read(importProvider).importedCount;
+                        final notifier = ref.read(importProvider.notifier);
+                        await notifier.confirm();
+                        final count = notifier.state.importedCount;
+                        final miss = notifier.mismatches;
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('已导入 $count 条，作业类型已更新'),
+                              backgroundColor: miss.isEmpty ? null : Colors.orange,
+                              content: Text(
+                                miss.isEmpty
+                                    ? '已导入 $count 条，作业类型已更新，合计对账一致'
+                                    : '已导入 $count 条，但 $miss 与表格合计不符，请核对',
+                              ),
                             ),
                           );
                         }

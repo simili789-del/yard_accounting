@@ -19,6 +19,15 @@ class ImportUiState {
   final bool done;
   final int importedCount;
 
+  /// 固定人员名单（来自设置），用于「强匹配」与名单外人员标注。
+  final List<String> fixedWorkers;
+
+  /// 强匹配开关：开启时只导入名单内人员，名单外的不可勾选。默认开。
+  final bool enforceFixed;
+
+  /// 是否匹配到历史模板（同格式表）。
+  final bool templateMatched;
+
   ImportUiState({
     this.filePath,
     this.loading = false,
@@ -29,6 +38,9 @@ class ImportUiState {
     this.shift = ShiftType.day,
     this.done = false,
     this.importedCount = 0,
+    this.fixedWorkers = const [],
+    this.enforceFixed = true,
+    this.templateMatched = false,
   });
 
   ImportUiState copyWith({
@@ -41,6 +53,9 @@ class ImportUiState {
     ShiftType? shift,
     bool? done,
     int? importedCount,
+    List<String>? fixedWorkers,
+    bool? enforceFixed,
+    bool? templateMatched,
   }) {
     return ImportUiState(
       filePath: filePath ?? this.filePath,
@@ -52,6 +67,9 @@ class ImportUiState {
       shift: shift ?? this.shift,
       done: done ?? this.done,
       importedCount: importedCount ?? this.importedCount,
+      fixedWorkers: fixedWorkers ?? this.fixedWorkers,
+      enforceFixed: enforceFixed ?? this.enforceFixed,
+      templateMatched: templateMatched ?? this.templateMatched,
     );
   }
 }
@@ -78,16 +96,24 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     try {
       final result = parseXlsx(path, sheetName: sheetName, headerRow: headerRow);
       final names = result.rows.map((r) => r.workerName).toSet();
-      final fixed =
-          _ref.read(settingsRepositoryProvider).getFixedWorkers().toSet();
+      final repo = _ref.read(settingsRepositoryProvider);
+      final fixed = repo.getFixedWorkers();
+      final fixedSet = fixed.toSet();
       // 有固定人员名单则预勾名单内的人，否则默认全选
-      final selected = fixed.isNotEmpty ? names.intersection(fixed) : names;
+      final selected = fixedSet.isNotEmpty ? names.intersection(fixedSet) : names;
+      // 模板匹配：同 sheet + 同原始列集合 视为同一格式表
+      final tpl = repo.getImportTemplate();
+      final fp = importTemplateFingerprint(result.sheetName, result.rawJobColumns);
+      final matched = tpl != null &&
+          importTemplateFingerprint(tpl.sheetName, tpl.rawColumns) == fp;
       state = state.copyWith(
         loading: false,
         result: result,
         selectedWorkers: selected,
         date: result.date,
         shift: result.shift,
+        fixedWorkers: fixed,
+        templateMatched: matched,
       );
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
@@ -113,6 +139,34 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
 
   void setDate(DateTime d) => state = state.copyWith(date: d);
   void setShift(ShiftType s) => state = state.copyWith(shift: s);
+  void setEnforceFixed(bool v) => state = state.copyWith(enforceFixed: v);
+
+  /// 已勾选人员各作业类型车数求和（用于合计对账）。
+  Map<String, int> get computedTotals {
+    final totals = <String, int>{};
+    final result = state.result;
+    if (result == null) return totals;
+    for (final row in result.rows) {
+      if (!state.selectedWorkers.contains(row.workerName)) continue;
+      for (final e in row.quantities.entries) {
+        totals[e.key] = (totals[e.key] ?? 0) + e.value;
+      }
+    }
+    return totals;
+  }
+
+  /// 与表格合计行不一致的作业类型列名（差异=漏录/错录）。
+  List<String> get mismatches {
+    final result = state.result;
+    if (result?.sheetTotals == null) return [];
+    final computed = computedTotals;
+    final miss = <String>[];
+    result!.sheetTotals!.forEach((col, tableTotal) {
+      final got = computed[col] ?? 0;
+      if (got != tableTotal) miss.add(col);
+    });
+    return miss;
+  }
 
   /// 确认导入：先同步作业类型（删旧的4个默认类 + 加表格清洗出的新类与单价），
   /// 再写入勾选人员的记录，最后保存固定人员名单。
@@ -134,9 +188,17 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
 
     // 2) 构造并写入记录
     final repo = _ref.read(recordRepositoryProvider);
+    final settings = _ref.read(settingsRepositoryProvider);
+    final fixedSet = state.enforceFixed
+        ? settings.getFixedWorkers().toSet()
+        : <String>{};
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!state.selectedWorkers.contains(row.workerName)) continue;
+      // 强匹配：仅保留固定人员名单内的人（名单为空时等同于不过滤）
+      if (state.enforceFixed && fixedSet.isNotEmpty) {
+        if (!fixedSet.contains(row.workerName)) continue;
+      }
       records.add(WorkRecord(
         id: RecordRepository.makeImportId(date, row.workerName),
         date: DateTime(date.year, date.month, date.day),
@@ -150,10 +212,15 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     await repo.saveImportedRecords(records);
 
     // 3) 沉淀固定人员名单 + 刷新联动
-    await _ref.read(settingsRepositoryProvider).setFixedWorkers(
-          state.selectedWorkers.toList(),
-        );
+    await settings.setFixedWorkers(state.selectedWorkers.toList());
     _ref.read(unitPricesProvider.notifier).refresh();
+
+    // 4) 记忆本次表格模板（同格式表下次自动识别）
+    await settings.saveImportTemplate(ImportTemplate(
+      sheetName: result.sheetName,
+      headerRow: result.headerRow,
+      rawColumns: result.rawJobColumns,
+    ));
 
     state = state.copyWith(done: true, importedCount: records.length);
   }

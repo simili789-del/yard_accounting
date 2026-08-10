@@ -3,6 +3,36 @@ import 'package:hive/hive.dart';
 import '../../core/constants/job_types.dart';
 import '../../domain/entities/salary_settings.dart';
 
+/// 导入模板：记住一张固定格式表的「表头行 + 原始列名集合」，
+/// 下次导入同格式表时自动识别并提示，免去每次重选列。
+class ImportTemplate {
+  final String sheetName;
+  final int headerRow;
+  final List<String> rawColumns;
+
+  ImportTemplate({
+    required this.sheetName,
+    required this.headerRow,
+    required this.rawColumns,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'sheetName': sheetName,
+        'headerRow': headerRow,
+        'rawColumns': rawColumns,
+      };
+
+  factory ImportTemplate.fromJson(Map<dynamic, dynamic> m) => ImportTemplate(
+        sheetName: m['sheetName'] as String,
+        headerRow: m['headerRow'] as int,
+        rawColumns: List<String>.from(m['rawColumns'] as List),
+      );
+}
+
+/// 模板指纹：同 sheet + 同原始列集合 即视为同一格式表。
+String importTemplateFingerprint(String sheetName, List<String> rawColumns) =>
+    '$sheetName||${rawColumns.join('|')}';
+
 /// 设置数据仓库：作业类型单价 + 工资构成 + 主题模式。
 class SettingsRepository {
   Box get _priceBox => Hive.box(HiveBoxes.jobPrices);
@@ -47,5 +77,20 @@ class SettingsRepository {
 
   Future<void> setFixedWorkers(List<String> workers) async {
     await _appBox.put('fixedWorkers', workers);
+  }
+
+  /// 「导入模板」：记住常用表格的列结构，下次自动套用。
+  ImportTemplate? getImportTemplate() {
+    final m = _appBox.get('importTemplate');
+    if (m == null) return null;
+    try {
+      return ImportTemplate.fromJson(Map<String, dynamic>.from(m as Map));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveImportTemplate(ImportTemplate template) async {
+    await _appBox.put('importTemplate', template.toJson());
   }
 }
