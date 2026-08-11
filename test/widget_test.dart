@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
 import 'package:yard_accounting/core/constants/job_types.dart';
+import 'package:yard_accounting/domain/entities/app_settings.dart';
 import 'package:yard_accounting/domain/entities/salary_settings.dart';
 import 'package:yard_accounting/domain/entities/work_record.dart';
 import 'package:yard_accounting/presentation/root_shell.dart';
@@ -19,16 +20,22 @@ Future<void> main() async {
   // 改用 Hive.init() + 系统临时目录，纯 Dart 实现，无插件依赖。
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    // 测试环境无原生插件实现，拦截所有未注册平台通道调用并返回 null，
+    // 避免 RootShell.initState 里的 receive_sharing_intent 等插件抛 MissingPluginException。
+    TestDefaultBinaryMessenger.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler((MethodCall call) async => null);
     final tempDir = await Directory.systemTemp.createTemp('hive_test_');
     Hive.init(tempDir.path);
     if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(ShiftTypeAdapter());
     if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(WorkRecordAdapter());
     if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(SalarySettingsAdapter());
+    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(AppSettingsAdapter());
     await Future.wait([
       Hive.openBox<WorkRecord>(HiveBoxes.records),
       Hive.openBox(HiveBoxes.jobPrices),
       Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
       Hive.openBox(HiveBoxes.appSettings),
+      Hive.openBox<AppSettings>(HiveBoxes.appSettingsV2),
     ]);
   });
 
@@ -39,9 +46,31 @@ Future<void> main() async {
       ),
     );
 
-    expect(find.text('今日记账'), findsOneWidget);
-    expect(find.text('明细查询'), findsOneWidget);
-    expect(find.text('月报统计'), findsOneWidget);
-    expect(find.text('设置'), findsOneWidget);
+    // 底部导航真实标签为「今日 / 明细 / 月报 / 设置」
+    // （见 lib/presentation/root_shell.dart 中 NavigationBar 的 destinations）。
+    // 注意：必须限定在 NavigationBar 内匹配，因为「设置」字样在设置页内部也会出现，
+    // 直接用 find.text('设置') 会匹配到多个而误判失败。
+    final navBar = find.byType(NavigationBar);
+    expect(navBar, findsOneWidget);
+    expect(
+      find.descendant(of: navBar, matching: find.byType(NavigationDestination)),
+      findsNWidgets(4),
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.text('今日')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.text('明细')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.text('月报')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.text('设置')),
+      findsOneWidget,
+    );
   });
 }
