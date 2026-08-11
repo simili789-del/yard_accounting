@@ -9,7 +9,11 @@ import '../providers/repository_providers.dart';
 ///
 /// 直接返回真实 [AppBar]，由其统一处理状态栏安全区、背景与固定高度，
 /// 避免自定义控件当 appBar 使用时各页面高度/背景不一致导致的「错行」。
-class YardAppBar extends ConsumerWidget {
+class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
+  /// 作为 Scaffold.appBar 使用时必须提供固定高度（与下方 toolbarHeight 保持一致）。
+  @override
+  final Size preferredSize = const Size.fromHeight(64);
+
   final List<Widget>? actions;
 
   const YardAppBar({super.key, this.actions});

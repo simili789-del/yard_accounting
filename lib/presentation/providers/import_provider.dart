@@ -28,6 +28,9 @@ class ImportUiState {
   /// 是否匹配到历史模板（同格式表）。
   final bool templateMatched;
 
+  /// 命中设置页「默认姓名」时的聚焦人员；非空时 UI 默认只勾他并强制仅导他。
+  final String? focusedWorker;
+
   ImportUiState({
     this.filePath,
     this.loading = false,
