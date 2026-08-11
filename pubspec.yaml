@@ -43,6 +43,7 @@ dev_dependencies:
   hive_generator: ^2.0.1
   freezed: ^2.5.0
   json_serializable: ^6.7.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -51,3 +52,14 @@ flutter:
   # assets:
   #   - assets/images/
   fonts: []
+
+# ===== 应用图标（换图机制，当前未启用自动生成）=====
+# 用法：把一张完整的方形图标（建议 1024x1024 PNG，主体居中留边）放到
+# assets/icon/app_icon.png，再运行 `flutter pub run flutter_launcher_icons`
+# 即可重新生成 Android/iOS 各分辨率图标（当前桌面图标已由
+# android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml 启用内置前景图过渡）。
+flutter_launcher_icons:
+  android: "launcher"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#2E7D32"
