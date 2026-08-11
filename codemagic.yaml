@@ -19,11 +19,10 @@ workflows:
         script: flutter analyze
       - name: Run tests
         script: flutter test
-      - name: Build APK (split per ABI)
-        script: flutter build apk --release --split-per-abi
+      - name: Build APK (arm64 single)
+        script: flutter build apk --release --target-platform android-arm64
     artifacts:
-      - build/**/outputs/**/*.apk
-      - build/**/outputs/**/*.aab
+      - build/app/outputs/flutter-apk/*.apk
       - build/**/outputs/**/mapping.txt
     publishing:
       email:
