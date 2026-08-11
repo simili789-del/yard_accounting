@@ -22,8 +22,8 @@ Future<void> main() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     // 测试环境无原生插件实现，拦截所有未注册平台通道调用并返回 null，
     // 避免 RootShell.initState 里的 receive_sharing_intent 等插件抛 MissingPluginException。
-    TestDefaultBinaryMessenger.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler((MethodCall call) async => null);
+    ServicesBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler((channel, message) async => null);
     final tempDir = await Directory.systemTemp.createTemp('hive_test_');
     Hive.init(tempDir.path);
     if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(ShiftTypeAdapter());
