@@ -50,7 +50,7 @@ class _RootShellState extends ConsumerState<RootShell> {
   void _consume(List<SharedMediaFile> files, StateController<String?> notifier) {
     for (final f in files) {
       final p = f.path;
-      if (p != null && isImportableFile(p)) {
+      if (isImportableFile(p)) {
         notifier.state = p;
         break;
       }

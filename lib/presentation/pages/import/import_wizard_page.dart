@@ -82,7 +82,7 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
         }),
         _HeaderRowTile(
           headerRow: result.headerRow,
-          override: _headerRow,
+          headerOverride: _headerRow,
           onChanged: (v) {
             setState(() => _headerRow = v);
             _reparse();
@@ -144,20 +144,20 @@ class _SheetSelector extends StatelessWidget {
 
 class _HeaderRowTile extends StatelessWidget {
   final int headerRow;
-  final int? override;
+  final int? headerOverride;
   final ValueChanged<int?> onChanged;
   const _HeaderRowTile(
-      {required this.headerRow, required this.override, required this.onChanged});
+      {required this.headerRow, required this.headerOverride, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    final ctrl =
-        TextEditingController(text: override?.toString() ?? headerRow.toString());
+    final ctrl = TextEditingController(
+        text: headerOverride?.toString() ?? headerRow.toString());
     return ListTile(
       leading: const Icon(Icons.format_list_numbered),
-      title: Text(override == null
+      title: Text(headerOverride == null
           ? '表头行：第 ${headerRow + 1} 行（自动识别）'
-          : '表头行：第 ${override! + 1} 行（手动）'),
+          : '表头行：第 ${headerOverride! + 1} 行（手动）'),
       trailing: SizedBox(
         width: 70,
         child: TextFormField(
@@ -405,7 +405,7 @@ class _WorkerList extends ConsumerWidget {
                     : () async {
                         final notifier = ref.read(importProvider.notifier);
                         await notifier.confirm();
-                        final count = notifier.state.importedCount;
+                        final count = notifier.lastImportedCount;
                         final miss = notifier.mismatches;
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

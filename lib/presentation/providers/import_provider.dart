@@ -226,6 +226,9 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     state = state.copyWith(done: true, importedCount: records.length);
   }
 
+  /// 供 UI 在 confirm 完成后安全读取导入条数（避免越权访问 protected 的 state）。
+  int get lastImportedCount => state.importedCount;
+
   void reset() => state = ImportUiState();
 }
 
