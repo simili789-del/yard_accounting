@@ -66,8 +66,12 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
             ...?actions,
             IconButton(
               icon: const Icon(Icons.undo_outlined),
-              tooltip: '撤销',
-              onPressed: () {},
+              tooltip: '撤销（功能开发中）',
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('撤销功能开发中')),
+                );
+              },
             ),
             IconButton(
               icon: Icon(

@@ -557,29 +557,7 @@ class _BackupSection extends ConsumerWidget {
                 _BackupButton(
                   label: '清空全部数据',
                   foregroundColor: Colors.red,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('确认清空'),
-                        content: const Text('此操作不可恢复，确定清空所有记录吗？'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('取消'),
-                          ),
-                          FilledButton(
-                            onPressed: () {
-                              // TODO: 实现清空逻辑
-                              Navigator.pop(ctx);
-                              _showSnack(context, '已清空全部数据');
-                            },
-                            child: const Text('确定'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  onPressed: () => _showSnack(context, '清空全部数据功能开发中'),
                 ),
               ],
             ),

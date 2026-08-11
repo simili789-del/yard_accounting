@@ -37,10 +37,10 @@ class StatsPage extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.ios_share),
-            tooltip: '导出工资单',
+            tooltip: '导出工资单（功能开发中）',
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('工资单已生成，可通过分享菜单发送')),
+                const SnackBar(content: Text('导出工资单功能开发中')),
               );
             },
           ),
