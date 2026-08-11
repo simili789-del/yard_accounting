@@ -617,14 +617,12 @@ class _PwaSection extends StatelessWidget {
 
 class _SettingsTextField extends StatelessWidget {
   final String label;
-  final TextEditingController? controller;
   final String? initialValue;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
 
   const _SettingsTextField({
     required this.label,
-    this.controller,
     this.initialValue,
     this.keyboardType,
     this.onChanged,
@@ -633,8 +631,7 @@ class _SettingsTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      controller: controller,
-      initialValue: controller == null ? initialValue : null,
+      initialValue: initialValue,
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
