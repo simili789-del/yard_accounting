@@ -8,15 +8,17 @@ class RecordRepository {
   Box<WorkRecord> get _box => Hive.box<WorkRecord>(HiveBoxes.records);
 
   /// 获取“今日”记录；若不存在则返回一条空白记录供表单编辑。
-  Future<WorkRecord> getTodayRecord() async {
-    final today = DateTime.now();
-    final key = _dateKey(today);
+  Future<WorkRecord> getTodayRecord() async => getRecordByDate(DateTime.now());
+
+  /// 获取指定日期记录；若不存在则返回空白草稿。
+  Future<WorkRecord> getRecordByDate(DateTime date) async {
+    final key = _dateKey(date);
     final existing = _box.get(key);
     if (existing != null) return existing;
 
     return WorkRecord(
       id: key,
-      date: DateTime(today.year, today.month, today.day),
+      date: DateTime(date.year, date.month, date.day),
       workerName: '',
       vehicleNo: '',
       shift: ShiftType.day,

@@ -75,10 +75,10 @@ class _RootShellState extends ConsumerState<RootShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.edit_note), label: '今日记账'),
-          NavigationDestination(icon: Icon(Icons.search), label: '明细查询'),
-          NavigationDestination(icon: Icon(Icons.bar_chart), label: '月报统计'),
-          NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
+          NavigationDestination(icon: Icon(Icons.home_outlined), label: '今日'),
+          NavigationDestination(icon: Icon(Icons.list_alt_outlined), label: '明细'),
+          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), label: '月报'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), label: '设置'),
         ],
       ),
     );

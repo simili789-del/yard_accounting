@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 
 import '../../core/constants/job_types.dart';
+import '../../domain/entities/app_settings.dart';
 import '../../domain/entities/salary_settings.dart';
 
 /// 导入模板：记住一张固定格式表的「表头行 + 原始列名集合」，
@@ -39,6 +40,8 @@ class SettingsRepository {
   Box<SalarySettings> get _salaryBox =>
       Hive.box<SalarySettings>(HiveBoxes.salarySettings);
   Box get _appBox => Hive.box(HiveBoxes.appSettings);
+  Box<AppSettings> get _appSettingsBox =>
+      Hive.box<AppSettings>(HiveBoxes.appSettingsV2);
 
   Map<String, double> getUnitPrices() {
     final map = <String, double>{};
@@ -62,6 +65,15 @@ class SettingsRepository {
 
   Future<void> saveSalarySettings(SalarySettings settings) async {
     await _salaryBox.put('current', settings);
+  }
+
+  /// 全局应用设置（v2 新 box）。
+  AppSettings getAppSettings() {
+    return _appSettingsBox.get('current') ?? AppSettings();
+  }
+
+  Future<void> saveAppSettings(AppSettings settings) async {
+    await _appSettingsBox.put('current', settings);
   }
 
   /// 主题模式：'light' / 'dark' / 'system'

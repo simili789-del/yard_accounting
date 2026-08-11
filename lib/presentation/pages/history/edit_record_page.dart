@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
 import '../../providers/repository_providers.dart';
-import '../../widgets/job_quantity_stepper.dart';
+import '../../widgets/job_type_card.dart';
 
 /// 编辑历史记录页面：可修改姓名/车号/班次/作业数量/备注，保存回 Hive。
 class EditRecordPage extends ConsumerStatefulWidget {
@@ -99,7 +99,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
           const SizedBox(height: 16),
           Text('作业类型', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          ...jobTypes.map((jobType) => JobQuantityStepper(
+          ...jobTypes.map((jobType) => JobTypeCard(
                 jobType: jobType,
                 quantity: _jobQuantities[jobType] ?? 0,
                 unitPrice: unitPrices[jobType] ?? 0,

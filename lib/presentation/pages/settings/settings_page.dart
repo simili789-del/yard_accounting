@@ -1,170 +1,667 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/job_types.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../domain/entities/salary_settings.dart';
+import '../../providers/app_settings_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../widgets/section_header.dart';
+import '../../widgets/yard_app_bar.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final unitPrices = ref.watch(unitPricesProvider);
-    final salary = ref.watch(salarySettingsProvider);
-    final themeMode = ref.watch(themeModeProvider);
-
     return Scaffold(
-      appBar: AppBar(title: const Text('设置管理')),
+      appBar: const YardAppBar(),
       body: ListView(
-        children: [
-          const _SectionHeader('作业类型单价配置'),
-          ...unitPrices.entries.map((e) => Dismissible(
-                key: Key(e.key),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  color: Colors.red,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                onDismissed: (_) {
-                  ref.read(unitPricesProvider.notifier).remove(e.key);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('已删除「${e.key}」')),
-                  );
-                },
-                child: ListTile(
-                  title: Text(e.key),
-                  trailing: SizedBox(
-                    width: 100,
-                    child: TextFormField(
-                      initialValue: e.value.toStringAsFixed(2),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(prefixText: '¥'),
-                      onFieldSubmitted: (v) {
-                        final price = double.tryParse(v) ?? e.value;
-                        ref
-                            .read(unitPricesProvider.notifier)
-                            .setPrice(e.key, price);
-                      },
-                    ),
-                  ),
-                ),
-              )),
-          ListTile(
-            leading: const Icon(Icons.add),
-            title: const Text('新增作业类型'),
-            onTap: () => _showAddJobTypeDialog(context, ref),
-          ),
-          const Divider(),
-          const _SectionHeader('工资构成'),
-          _NumberField(
-            label: '底薪',
-            value: salary.baseSalary,
-            onChanged: (v) => ref
-                .read(salarySettingsProvider.notifier)
-                .update(salary.copyWith(baseSalary: v)),
-          ),
-          _NumberField(
-            label: '餐补',
-            value: salary.mealAllowance,
-            onChanged: (v) => ref
-                .read(salarySettingsProvider.notifier)
-                .update(salary.copyWith(mealAllowance: v)),
-          ),
-          _NumberField(
-            label: '扣款',
-            value: salary.deduction,
-            onChanged: (v) => ref
-                .read(salarySettingsProvider.notifier)
-                .update(salary.copyWith(deduction: v)),
-          ),
-          const Divider(),
-          const _SectionHeader('主题'),
-          RadioListTile(
-            title: const Text('跟随系统'),
-            value: 'system',
-            groupValue: themeMode,
-            onChanged: (v) => _setTheme(ref, v!),
-          ),
-          RadioListTile(
-            title: const Text('浅色模式'),
-            value: 'light',
-            groupValue: themeMode,
-            onChanged: (v) => _setTheme(ref, v!),
-          ),
-          RadioListTile(
-            title: const Text('深色模式'),
-            value: 'dark',
-            groupValue: themeMode,
-            onChanged: (v) => _setTheme(ref, v!),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _setTheme(WidgetRef ref, String mode) {
-    ref.read(themeModeProvider.notifier).state = mode;
-    ref.read(settingsRepositoryProvider).setThemeMode(mode);
-  }
-
-  void _showAddJobTypeDialog(BuildContext context, WidgetRef ref) {
-    final nameCtrl = TextEditingController();
-    final priceCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('新增作业类型'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: '类型名称'),
-            ),
-            TextField(
-              controller: priceCtrl,
-              decoration: const InputDecoration(labelText: '单价'),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              final price = double.tryParse(priceCtrl.text) ?? 0;
-              if (name.isNotEmpty) {
-                ref.read(unitPricesProvider.notifier).add(name, price);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('已添加「$name」')),
-                );
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('确定'),
-          ),
+        padding: const EdgeInsets.only(bottom: 32),
+        children: const [
+          _ProfileSection(),
+          _UnitPriceSection(),
+          _JobTypeManageSection(),
+          _SalarySection(),
+          _AppearanceSection(),
+          _TargetSection(),
+          _BackupSection(),
+          _PwaSection(),
         ],
       ),
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
+class _ProfileSection extends ConsumerStatefulWidget {
+  const _ProfileSection();
+
+  @override
+  ConsumerState<_ProfileSection> createState() => _ProfileSectionState();
+}
+
+class _ProfileSectionState extends ConsumerState<_ProfileSection> {
+  String _workerName = '';
+  String _vehicleNo = '';
+  String _yardName = '45万货场';
+  bool _initialized = false;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+    final settings = ref.watch(appSettingsProvider);
+    if (!_initialized) {
+      _workerName = settings.defaultWorkerName;
+      _vehicleNo = settings.defaultVehicleNo;
+      _yardName = settings.yardName;
+      _initialized = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('个人信息'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _SettingsTextField(
+                  label: '默认姓名',
+                  initialValue: _workerName,
+                  onChanged: (v) => _workerName = v,
+                ),
+                const SizedBox(height: 12),
+                _SettingsTextField(
+                  label: '默认车号',
+                  initialValue: _vehicleNo,
+                  onChanged: (v) => _vehicleNo = v,
+                ),
+                const SizedBox(height: 12),
+                _SettingsTextField(
+                  label: '货场名称',
+                  initialValue: _yardName,
+                  onChanged: (v) => _yardName = v,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      final notifier = ref.read(appSettingsProvider.notifier);
+                      notifier.updateDefaultWorkerName(_workerName.trim());
+                      notifier.updateDefaultVehicleNo(_vehicleNo.trim());
+                      notifier.updateYardName(_yardName.trim());
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('个人信息已保存')),
+                      );
+                    },
+                    child: const Text('保存个人信息'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UnitPriceSection extends ConsumerWidget {
+  const _UnitPriceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unitPrices = ref.watch(unitPricesProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('单价设置（元/车）'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: unitPrices.entries.map((e) {
+                final color = DefaultJobTypes.colorOf(e.key);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(e.key)),
+                      SizedBox(
+                        width: 80,
+                        child: TextFormField(
+                          initialValue: e.value.toStringAsFixed(2),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          textAlign: TextAlign.right,
+                          onFieldSubmitted: (v) {
+                            final price = double.tryParse(v) ?? e.value;
+                            ref
+                                .read(unitPricesProvider.notifier)
+                                .setPrice(e.key, price);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _JobTypeManageSection extends ConsumerWidget {
+  const _JobTypeManageSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unitPrices = ref.watch(unitPricesProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('作业类型管理'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: unitPrices.entries.map((e) {
+                final color = DefaultJobTypes.colorOf(e.key);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text('${e.key} (¥${e.value.toStringAsFixed(2)}/车)'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          ref.read(unitPricesProvider.notifier).remove(e.key);
+                        },
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const _AddJobTypeCard(),
+      ],
+    );
+  }
+}
+
+class _AddJobTypeCard extends ConsumerStatefulWidget {
+  const _AddJobTypeCard();
+
+  @override
+  ConsumerState<_AddJobTypeCard> createState() => _AddJobTypeCardState();
+}
+
+class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
+  final _nameCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _priceCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('新增作业类型',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(
+                      hintText: '类型名称',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _priceCtrl,
+                    decoration: const InputDecoration(
+                      hintText: '单价',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () {
+                  final name = _nameCtrl.text.trim();
+                  final price = double.tryParse(_priceCtrl.text) ?? 0;
+                  if (name.isNotEmpty) {
+                    ref.read(unitPricesProvider.notifier).add(name, price);
+                    _nameCtrl.clear();
+                    _priceCtrl.clear();
+                  }
+                },
+                child: const Text('添加类型'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SalarySection extends ConsumerWidget {
+  const _SalarySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final salary = ref.watch(salarySettingsProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('工资构成设置'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _NumberField(
+                  label: '基本底薪',
+                  value: salary.baseSalary,
+                  onChanged: (v) => _update(ref, salary.copyWith(baseSalary: v)),
+                ),
+                _NumberField(
+                  label: '餐补',
+                  value: salary.mealAllowance,
+                  onChanged: (v) =>
+                      _update(ref, salary.copyWith(mealAllowance: v)),
+                ),
+                _NumberField(
+                  label: '加班',
+                  value: salary.overtime,
+                  onChanged: (v) => _update(ref, salary.copyWith(overtime: v)),
+                ),
+                _NumberField(
+                  label: '工龄/奖金',
+                  value: salary.seniorityBonus,
+                  onChanged: (v) =>
+                      _update(ref, salary.copyWith(seniorityBonus: v)),
+                ),
+                _NumberField(
+                  label: '扣款',
+                  value: salary.deduction,
+                  onChanged: (v) => _update(ref, salary.copyWith(deduction: v)),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('工资设置已保存')),
+                      );
+                    },
+                    child: const Text('保存工资设置'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _update(WidgetRef ref, SalarySettings settings) {
+    ref.read(salarySettingsProvider.notifier).update(settings);
+  }
+}
+
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final themeMode = ref.watch(themeModeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('外观设置'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('主题颜色'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  children: List.generate(AppTheme.primaries.length, (i) {
+                    final color = AppTheme.primaries[i];
+                    final selected = settings.primaryColorIndex == i;
+                    return InkWell(
+                      onTap: () => ref
+                          .read(appSettingsProvider.notifier)
+                          .updatePrimaryColorIndex(i),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: selected
+                              ? Border.all(color: Colors.white, width: 3)
+                              : null,
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                    color: color.withOpacity(0.5),
+                                    blurRadius: 8,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: selected
+                            ? const Icon(Icons.check,
+                                color: Colors.white, size: 20)
+                            : null,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Expanded(child: Text('隐藏金额')),
+                    Switch(
+                      value: settings.hideAmount,
+                      onChanged: (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateHideAmount(v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(child: Text('深色模式')),
+                    Switch(
+                      value: themeMode == 'dark',
+                      onChanged: (v) {
+                        final mode = v ? 'dark' : 'light';
+                        ref.read(themeModeProvider.notifier).state = mode;
+                        ref
+                            .read(settingsRepositoryProvider)
+                            .setThemeMode(mode);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TargetSection extends ConsumerStatefulWidget {
+  const _TargetSection();
+
+  @override
+  ConsumerState<_TargetSection> createState() => _TargetSectionState();
+}
+
+class _TargetSectionState extends ConsumerState<_TargetSection> {
+  int _dailyTarget = 100;
+  int _monthlyTarget = 2500;
+  bool _initialized = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(appSettingsProvider);
+    if (!_initialized) {
+      _dailyTarget = settings.dailyTargetVehicles;
+      _monthlyTarget = settings.monthlyTargetVehicles;
+      _initialized = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('目标与参数'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _SettingsTextField(
+                  label: '每日目标车数',
+                  initialValue: '$_dailyTarget',
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => _dailyTarget = int.tryParse(v) ?? _dailyTarget,
+                ),
+                const SizedBox(height: 12),
+                _SettingsTextField(
+                  label: '每月目标车数',
+                  initialValue: '$_monthlyTarget',
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) =>
+                      _monthlyTarget = int.tryParse(v) ?? _monthlyTarget,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      final notifier = ref.read(appSettingsProvider.notifier);
+                      notifier.updateDailyTarget(_dailyTarget);
+                      notifier.updateMonthlyTarget(_monthlyTarget);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('目标设置已保存')),
+                      );
+                    },
+                    child: const Text('保存目标设置'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BackupSection extends ConsumerWidget {
+  const _BackupSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('数据安全与备份'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                _BackupButton(
+                  label: '导出 JSON 备份',
+                  onPressed: () => _showSnack(context, '导出 JSON 备份功能开发中'),
+                ),
+                _BackupButton(
+                  label: '从 JSON 恢复',
+                  onPressed: () => _showSnack(context, '从 JSON 恢复功能开发中'),
+                ),
+                _BackupButton(
+                  label: '从 CSV 导入记录',
+                  onPressed: () => _showSnack(context, '从 CSV 导入功能开发中'),
+                ),
+                _BackupButton(
+                  label: '恢复示例数据',
+                  onPressed: () => _showSnack(context, '恢复示例数据功能开发中'),
+                ),
+                _BackupButton(
+                  label: '清空全部数据',
+                  foregroundColor: Colors.red,
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('确认清空'),
+                        content: const Text('此操作不可恢复，确定清空所有记录吗？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () {
+                              // TODO: 实现清空逻辑
+                              Navigator.pop(ctx);
+                              _showSnack(context, '已清空全部数据');
+                            },
+                            child: const Text('确定'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showSnack(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
+
+class _BackupButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final Color? foregroundColor;
+
+  const _BackupButton({
+    required this.label,
+    required this.onPressed,
+    this.foregroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: foregroundColor,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+}
+
+class _PwaSection extends StatelessWidget {
+  const _PwaSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: Text(
+        '安装到手机（PWA）：\n在浏览器中点击底部“分享”按钮 → 选择“添加到主屏幕”。',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      ),
+    );
+  }
+}
+
+class _SettingsTextField extends StatelessWidget {
+  final String label;
+  final TextEditingController? controller;
+  final String? initialValue;
+  final TextInputType? keyboardType;
+  final ValueChanged<String>? onChanged;
+
+  const _SettingsTextField({
+    required this.label,
+    this.controller,
+    this.initialValue,
+    this.keyboardType,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      initialValue: controller == null ? initialValue : null,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+      ),
+      onChanged: onChanged,
     );
   }
 }
@@ -182,16 +679,22 @@ class _NumberField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(label),
-      trailing: SizedBox(
-        width: 120,
-        child: TextFormField(
-          initialValue: value.toStringAsFixed(2),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(prefixText: '¥'),
-          onFieldSubmitted: (v) => onChanged(double.tryParse(v) ?? value),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          SizedBox(
+            width: 120,
+            child: TextFormField(
+              initialValue: value.toStringAsFixed(2),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.right,
+              onChanged: (v) => onChanged(double.tryParse(v) ?? value),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -6,18 +6,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/constants/job_types.dart';
 import 'core/theme/app_theme.dart';
+import 'domain/entities/app_settings.dart';
 import 'domain/entities/salary_settings.dart';
 import 'domain/entities/work_record.dart';
+import 'presentation/providers/app_settings_provider.dart';
 import 'presentation/providers/repository_providers.dart';
 import 'presentation/root_shell.dart';
 
 /// 首次启动默认作业类型单价
-const _defaultPrices = {
-  '装车': 1.0,
-  '卸车': 1.0,
-  '倒货': 0.8,
-  '理货': 0.5,
-};
+final _defaultPrices = DefaultJobTypes.defaultPrices;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +33,9 @@ Future<void> main() async {
     if (!Hive.isAdapterRegistered(2)) {
       Hive.registerAdapter(SalarySettingsAdapter());
     }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(AppSettingsAdapter());
+    }
 
     // 确保所有 Box 打开完成后再启动 App
     await Future.wait([
@@ -43,6 +43,7 @@ Future<void> main() async {
       Hive.openBox(HiveBoxes.jobPrices),
       Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
       Hive.openBox(HiveBoxes.appSettings),
+      Hive.openBox<AppSettings>(HiveBoxes.appSettingsV2),
     ]);
 
     // 首次启动：初始化默认作业类型单价（box 为空时写入）
@@ -80,12 +81,14 @@ class YardAccountingApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final appSettings = ref.watch(appSettingsProvider);
+    final primaryIndex = appSettings.primaryColorIndex;
 
     return MaterialApp(
       title: '货场作业记账',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      theme: AppTheme.light(primaryIndex: primaryIndex),
+      darkTheme: AppTheme.dark(primaryIndex: primaryIndex),
       themeMode: switch (themeMode) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
