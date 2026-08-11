@@ -25,6 +25,20 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// 强制所有模块（含第三方 Flutter 插件）的 Java/Kotlin 编译目标统一为 17，
+// 否则插件内部 Java(1.8) 与 Kotlin(17) 不一致会触发 Gradle JVM-target 校验失败。
+subprojects {
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = '17'
+        targetCompatibility = '17'
+    }
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = '17'
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
