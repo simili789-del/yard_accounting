@@ -27,6 +27,10 @@ class AppSettings extends HiveObject {
   @HiveField(6, defaultValue: false)
   final bool hideAmount;
 
+  /// 船名库：设置页维护的船名名单（不与具体记录挂钩，仅作参考库）。
+  @HiveField(7, defaultValue: <String>[])
+  final List<String> boatNames;
+
   AppSettings({
     this.defaultWorkerName = '',
     this.defaultVehicleNo = '',
@@ -35,6 +39,7 @@ class AppSettings extends HiveObject {
     this.monthlyTargetVehicles = 2500,
     this.primaryColorIndex = 0,
     this.hideAmount = false,
+    this.boatNames = const [],
   });
 
   AppSettings copyWith({
@@ -45,6 +50,7 @@ class AppSettings extends HiveObject {
     int? monthlyTargetVehicles,
     int? primaryColorIndex,
     bool? hideAmount,
+    List<String>? boatNames,
   }) {
     return AppSettings(
       defaultWorkerName: defaultWorkerName ?? this.defaultWorkerName,
@@ -54,6 +60,7 @@ class AppSettings extends HiveObject {
       monthlyTargetVehicles: monthlyTargetVehicles ?? this.monthlyTargetVehicles,
       primaryColorIndex: primaryColorIndex ?? this.primaryColorIndex,
       hideAmount: hideAmount ?? this.hideAmount,
+      boatNames: boatNames ?? this.boatNames,
     );
   }
 }

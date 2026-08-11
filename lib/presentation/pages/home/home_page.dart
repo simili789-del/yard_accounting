@@ -101,17 +101,6 @@ class _HomeBody extends ConsumerWidget {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _TextFieldCard(
-              label: '船名（挖掘机绩效等）',
-              value: record.boatName ?? '',
-              onChanged: (v) => ref
-                  .read(selectedDateRecordProvider.notifier)
-                  .updateBasicInfo(boatName: v),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: SegmentedButton<ShiftType>(
               segments: const [
                 ButtonSegment(

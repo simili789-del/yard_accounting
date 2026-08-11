@@ -40,4 +40,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
 
   void updateHideAmount(bool value) =>
       update(state.copyWith(hideAmount: value));
+
+  void updateBoatNames(List<String> value) =>
+      update(state.copyWith(boatNames: value));
 }

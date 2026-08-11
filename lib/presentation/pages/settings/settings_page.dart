@@ -22,11 +22,11 @@ class SettingsPage extends ConsumerWidget {
           _ProfileSection(),
           _UnitPriceSection(),
           _JobTypeManageSection(),
+          _BoatNameSection(),
           _SalarySection(),
           _AppearanceSection(),
           _TargetSection(),
           _BackupSection(),
-          _PwaSection(),
         ],
       ),
     );
@@ -600,16 +600,103 @@ class _BackupButton extends StatelessWidget {
   }
 }
 
-class _PwaSection extends StatelessWidget {
-  const _PwaSection();
+class _BoatNameSection extends ConsumerWidget {
+  const _BoatNameSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final boatNames = ref.watch(appSettingsProvider).boatNames;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('船名库管理'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                if (boatNames.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('暂无船名，可在下方添加',
+                        style: TextStyle(color: Colors.grey)),
+                  ),
+                ...boatNames.map((name) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.directions_boat_outlined, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(name)),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
+                            onPressed: () {
+                              final next = List<String>.from(boatNames)
+                                ..remove(name);
+                              ref
+                                  .read(appSettingsProvider.notifier)
+                                  .updateBoatNames(next);
+                            },
+                          ),
+                        ],
+                      ),
+                    )),
+                const _AddBoatNameCard(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddBoatNameCard extends ConsumerStatefulWidget {
+  const _AddBoatNameCard();
+
+  @override
+  ConsumerState<_AddBoatNameCard> createState() => _AddBoatNameCardState();
+}
+
+class _AddBoatNameCardState extends ConsumerState<_AddBoatNameCard> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(16),
-      child: Text(
-        '安装到手机（PWA）：\n在浏览器中点击底部“分享”按钮 → 选择“添加到主屏幕”。',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _ctrl,
+              decoration: const InputDecoration(hintText: '新增船名'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton(
+            onPressed: () {
+              final name = _ctrl.text.trim();
+              if (name.isNotEmpty) {
+                final cur = ref.read(appSettingsProvider).boatNames;
+                if (!cur.contains(name)) {
+                  ref
+                      .read(appSettingsProvider.notifier)
+                      .updateBoatNames([...cur, name]);
+                }
+                _ctrl.clear();
+              }
+            },
+            child: const Text('添加'),
+          ),
+        ],
       ),
     );
   }

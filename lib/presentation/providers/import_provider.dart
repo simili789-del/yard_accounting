@@ -41,6 +41,7 @@ class ImportUiState {
     this.fixedWorkers = const [],
     this.enforceFixed = true,
     this.templateMatched = false,
+    this.focusedWorker,
   });
 
   ImportUiState copyWith({
@@ -56,6 +57,7 @@ class ImportUiState {
     List<String>? fixedWorkers,
     bool? enforceFixed,
     bool? templateMatched,
+    String? focusedWorker,
   }) {
     return ImportUiState(
       filePath: filePath ?? this.filePath,
@@ -70,6 +72,7 @@ class ImportUiState {
       fixedWorkers: fixedWorkers ?? this.fixedWorkers,
       enforceFixed: enforceFixed ?? this.enforceFixed,
       templateMatched: templateMatched ?? this.templateMatched,
+      focusedWorker: focusedWorker ?? this.focusedWorker,
     );
   }
 }
@@ -97,10 +100,27 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
       final result = parseXlsx(path, sheetName: sheetName, headerRow: headerRow);
       final names = result.rows.map((r) => r.workerName).toSet();
       final repo = _ref.read(settingsRepositoryProvider);
+      final defaultName = repo.getAppSettings().defaultWorkerName.trim();
       final fixed = repo.getFixedWorkers();
       final fixedSet = fixed.toSet();
-      // 有固定人员名单则预勾名单内的人，否则默认全选
-      final selected = fixedSet.isNotEmpty ? names.intersection(fixedSet) : names;
+
+      // 识别设置页「默认姓名」：命中则默认只勾该人并强制仅导他；
+      // 否则回退到固定人员名单；再否则默认全选。
+      String? focusedWorker;
+      Set<String> selected;
+      bool enforce;
+      if (defaultName.isNotEmpty && names.contains(defaultName)) {
+        focusedWorker = defaultName;
+        selected = {defaultName};
+        enforce = true;
+      } else if (fixedSet.isNotEmpty) {
+        selected = names.intersection(fixedSet);
+        enforce = true;
+      } else {
+        selected = names;
+        enforce = false;
+      }
+
       // 模板匹配：同 sheet + 同原始列集合 视为同一格式表
       final tpl = repo.getImportTemplate();
       final fp = importTemplateFingerprint(result.sheetName, result.rawJobColumns);
@@ -113,6 +133,8 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         date: result.date,
         shift: result.shift,
         fixedWorkers: fixed,
+        enforceFixed: enforce,
+        focusedWorker: focusedWorker,
         templateMatched: matched,
       );
     } catch (e) {
