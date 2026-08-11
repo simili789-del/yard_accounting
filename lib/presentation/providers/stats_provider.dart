@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/entities/salary_settings.dart';
 import '../../domain/entities/work_record.dart';
 import 'repository_providers.dart';
 

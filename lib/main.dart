@@ -14,7 +14,7 @@ import 'presentation/providers/repository_providers.dart';
 import 'presentation/root_shell.dart';
 
 /// 首次启动默认作业类型单价
-final _defaultPrices = DefaultJobTypes.defaultPrices;
+const _defaultPrices = DefaultJobTypes.defaultPrices;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

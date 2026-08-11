@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
-import '../../providers/app_settings_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
 import '../../widgets/job_type_card.dart';

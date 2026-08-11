@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/work_record.dart';
-import '../../data/repositories/record_repository.dart';
 import 'repository_providers.dart';
 
 enum QuickRange { today, last7Days, thisMonth, lastMonth, custom }
