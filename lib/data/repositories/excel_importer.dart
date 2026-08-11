@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:excel/excel.dart';
+import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
@@ -54,15 +54,15 @@ class ExcelParseResult {
 /// [sheetName] 不传则默认「铲车绩效表」；[headerRow] 不传则自动扫描含「姓名」的行。
 ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final bytes = File(path).readAsBytesSync();
-  final excel = Excel.decodeBytes(bytes);
-  final sheetNames = excel.tables.keys.toList();
+  final decoder = SpreadsheetDecoder.decodeBytes(bytes);
+  final sheetNames = decoder.tables.keys.toList();
 
   final target = sheetName ?? _defaultSheet;
-  final sheet = excel.tables[target];
-  if (sheet == null) {
+  final table = decoder.tables[target];
+  if (table == null) {
     throw Exception('未找到工作表「$target」，可用：${sheetNames.join('、')}');
   }
-  final rows = sheet.rows;
+  final rows = table.rows;
 
   // 1) 定位表头行
   int headerIdx;
@@ -218,11 +218,8 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
 }
 
 /// 取出单元格底层值（文本/数字/公式缓存值）。
-dynamic _raw(dynamic cell) {
-  final cv = cell?.value; // excel 4.x: CellValue?
-  if (cv == null) return null;
-  return cv.value;
-}
+/// spreadsheet_decoder 返回的 rows 里每个元素已经是原始值，无需额外 unwrap。
+dynamic _raw(dynamic cell) => cell;
 
 String? _text(dynamic cell) {
   final v = _raw(cell);
