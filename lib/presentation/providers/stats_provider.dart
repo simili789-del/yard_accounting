@@ -111,7 +111,7 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
         totalQty: (existing?.totalQty ?? 0) + q,
         dayQty: (existing?.dayQty ?? 0) + dayAdd,
         nightQty: (existing?.nightQty ?? 0) + nightAdd,
-        jobTypes: {...(existing?.jobTypes ?? []), jobType}.toList(),
+        jobTypes: <String>{...(existing?.jobTypes ?? <String>[]), jobType}.toList(),
       );
     });
 
