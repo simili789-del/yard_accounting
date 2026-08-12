@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
 import '../../domain/entities/work_record.dart';
@@ -63,18 +65,28 @@ class ExcelParseResult {
 /// [sheetName] 不传则默认「铲车绩效表」；[headerRow] 不传则自动扫描含「姓名」的行。
 ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final bytes = File(path).readAsBytesSync();
-  final decoder = SpreadsheetDecoder.decodeBytes(bytes);
-  final sheetNames = decoder.tables.keys.toList();
+
+  // 主路径：spreadsheet_decoder（快速、功能全，但不支持批注/复杂格式）
+  _RawWorkbook raw;
+  try {
+    final decoder = SpreadsheetDecoder.decodeBytes(bytes);
+    raw = _fromSpreadsheetDecoder(decoder);
+  } on UnsupportedError catch (e) {
+    // Fallback：纯 Dart ZIP+XML 解析（兼容含批注/drawings/超大 styles 的 xlsx）
+    raw = _fallbackDecodeBytes(bytes);
+  }
+
+  final sheetNames = raw.tables.keys.toList();
 
   // 预扫描每个 sheet 是否可导入（供向导下拉标注，并用于默认 sheet 选择）
-  final sheetImportableMap = _scanImportable(decoder);
+  final sheetImportableMap = _scanImportableRaw(raw);
   // 用户未指定 sheet、或指定的 sheet 不存在时，自动选中首个「看起来像司机
   // 绩效表」的 sheet（含 绩效/铲车/装载机/挖掘机 关键词优先，且非考勤类）。
   var target = sheetName;
-  if (target == null || !decoder.tables.containsKey(target)) {
-    target = _pickDefaultSheet(decoder) ?? sheetNames.first;
+  if (target == null || !raw.tables.containsKey(target)) {
+    target = _pickDefaultSheetRaw(raw) ?? sheetNames.first;
   }
-  final table = decoder.tables[target];
+  final table = raw.tables[target];
   if (table == null) {
     throw Exception('未找到工作表「$target」，可用：${sheetNames.join('、')}');
   }
@@ -338,54 +350,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   );
 }
 
-/// 扫描文件内每个工作表是否可导入（轻量结构检查，不解析车数）。
-Map<String, bool> _scanImportable(SpreadsheetDecoder decoder) {
-  final map = <String, bool>{};
-  for (final name in decoder.tables.keys) {
-    final t = decoder.tables[name];
-    map[name] = t == null ? false : _sheetImportable(t, name);
-  }
-  return map;
-}
-
-/// 单个工作表是否看起来像司机绩效表：含「姓名」表头、非考勤类、且至少有一数值车数。
-bool _sheetImportable(SpreadsheetTable table, String name) {
-  int? headerIdx;
-  for (int r = 0; r < table.rows.length; r++) {
-    if (table.rows[r].any((c) => (_text(c) ?? '').contains('姓名'))) {
-      headerIdx = r;
-      break;
-    }
-  }
-  if (headerIdx == null) return false;
-  final header = table.rows[headerIdx];
-  if (_isNonPerfSheet(name, header)) return false;
-  for (int r = headerIdx + 1; r < table.rows.length; r++) {
-    for (final c in table.rows[r]) {
-      final v = _raw(c);
-      if (v is num && v != 0) return true;
-    }
-  }
-  return false;
-}
-
-/// 自动选择默认工作表：优先含 绩效/铲车/装载机/挖掘机 关键词且可导入的，
-/// 其次任意可导入的，都没有则返回 null。
-String? _pickDefaultSheet(SpreadsheetDecoder decoder) {
-  const preferred = ['绩效', '铲车', '装载机', '挖掘机'];
-  for (final k in preferred) {
-    for (final name in decoder.tables.keys) {
-      if (name.contains(k) && _sheetImportable(decoder.tables[name]!, name)) {
-        return name;
-      }
-    }
-  }
-  for (final name in decoder.tables.keys) {
-    if (_sheetImportable(decoder.tables[name]!, name)) return name;
-  }
-  return null;
-}
-
 /// 判断表头/表名是否像「考勤/工资/汇总/火车明细」等非绩效表。
 /// 依据：表名含排除关键词、列数过多（>25）、或候选作业列中纯数字/序号列过半
 /// （考勤表的 1~31 日列）。作业类型列通常为中文业务词（装车/归垛/倒货/加高）。
@@ -556,4 +520,245 @@ CleanedColumn _cleanColumn(String raw) {
     );
   }
   return CleanedColumn(raw.trim(), null);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 内部数据结构 + Fallback 解析器
+// ═══════════════════════════════════════════════════════════════════
+
+/// 抽象工作表，屏蔽 [SpreadsheetDecoder] 与 fallback 解析器的差异。
+class _RawTable {
+  final String name;
+  final List<List<dynamic>> rows;
+  _RawTable(this.name, this.rows);
+}
+
+/// 抽象工作簿。
+class _RawWorkbook {
+  final Map<String, _RawTable> tables;
+  _RawWorkbook(this.tables);
+}
+
+/// 将 [SpreadsheetDecoder] 的结果转为 [_RawWorkbook]。
+_RawWorkbook _fromSpreadsheetDecoder(SpreadsheetDecoder decoder) {
+  final tables = <String, _RawTable>{};
+  for (final entry in decoder.tables.entries) {
+    tables[entry.key] = _RawTable(entry.key, entry.value.rows);
+  }
+  return _RawWorkbook(tables);
+}
+
+/// Fallback 解析器：当 spreadsheet_decoder 因不支持批注/复杂格式而抛
+/// UnsupportedError 时，用纯 Dart ZIP+XML 解析 xlsx。
+///
+/// 只实现导入需要的最小功能集（读取单元格文本/数字/日期），
+/// 不支持样式/公式/合并单元格等高级特性——对司机绩效表足够了。
+_RawWorkbook _fallbackDecodeBytes(Uint8List bytes) {
+  final archive = ZipDecoder().decodeBytes(bytes);
+
+  // 提取所有文件内容
+  final files = <String, String>{};
+  for (final file in archive) {
+    if (!file.isFile) continue;
+    // 跳过二进制媒体文件（图片等），只读 XML 文本
+    if (file.name.endsWith('.xml') ||
+        file.name.endsWith('.rels') ||
+        file.name == '[Content_Types].xml') {
+      try {
+        files[file.name] =
+            String.fromCharCodes(file.content as List<int>);
+      } catch (_) {
+        // 二进制内容跳过
+      }
+    }
+  }
+
+  // 1) 解析 workbook.xml → sheet 名称列表 + rId 映射
+  final sheetIdToRid = <int, String>{};
+  final ridToTarget = <String, String>{};
+  final wbXml = files['xl/workbook.xml'] ?? '';
+  // <sheet name="xxx" sheetId="1" r:id="rId2"/> （注意 XML 用小写 r:id）
+  for (final m in RegExp(r'<sheet\s+name="([^"]*)"\s+sheetId="(\d+)".*?r:id="([^"]*)"')
+      .allMatches(wbXml)) {
+    final sid = int.tryParse(m.group(2)!) ?? 0;
+    sheetIdToRid[sid] = m.group(3)!;
+  }
+
+  // 2) 解析 workbook.xml.rels → rId → Target 映射
+  final relsXml = files['xl/_rels/workbook.xml.rels'] ?? '';
+  for (final m in RegExp(r'Id="([^"]*)"[^>]*Target="([^"]*)"').allMatches(relsXml)) {
+    ridToTarget[m.group(1)!] = m.group(2)!;
+  }
+
+  // 3) 解析共享字符串表
+  final sharedStrings = <String>[];
+  final sstXml = files['xl/sharedStrings.xml'] ?? '';
+  if (sstXml.isNotEmpty) {
+    // <si><t>文本</t></si> 或 <si><t xml:space="preserve">文本</t></si>
+    for (final m in RegExp(r'<si[^>]*>(.*?)</si>', dotAll: true)
+        .allMatches(sstXml)) {
+      final siContent = m.group(1) ?? '';
+      final tMatch = RegExp(r'<t(?:\s+[^>]*)?>([^<]*)</t>').firstMatch(siContent);
+      sharedStrings.add(tMatch?.group(1)?.trim() ?? '');
+    }
+  }
+
+  // 4) 解析每个 worksheet
+  final tables = <String, _RawTable>{};
+  // 按 sheetId 排序保证顺序一致
+  final sortedIds = sheetIdToRid.keys.toList()..sort();
+  for (final sid in sortedIds) {
+    final rid = sheetIdToRid[sid];
+    if (rid == null) continue;
+    final target = ridToTarget[rid];
+    if (target == null) continue;
+
+    // 从 rels Target 中提取 sheet 名称（如 "worksheets/sheet1.xml"）
+    // 名称来自 workbook.xml 中的 name 属性
+    final nameMatch =
+        RegExp('sheetId="$sid"[^>]*name="([^"]*)"').firstMatch(wbXml);
+    final sheetName = nameMatch?.group(1) ?? 'Sheet$sid';
+
+    final sheetPath = 'xl/$target';
+    final sheetXml = files[sheetPath];
+    if (sheetXml == null) continue;
+
+    final rows = _parseSheetXml(sheetXml, sharedStrings);
+    tables[sheetName] = _RawTable(sheetName, rows);
+  }
+
+  if (tables.isEmpty) {
+    throw Exception(
+        'Fallback 解析失败：未找到任何工作表数据。'
+        '该文件可能不是有效的 xlsx 格式，或已严重损坏。');
+  }
+
+  return _RawWorkbook(tables);
+}
+
+/// 解析单个 worksheet XML → 二维单元格数据。
+List<List<dynamic>> _parseSheetXml(String xml, List<String> sharedStrings) {
+  final rows = <List<dynamic>>[];
+
+  // 定位 <sheetData> 块
+  final dataStart = xml.indexOf('<sheetData>');
+  if (dataStart < 0) return rows;
+  final dataEnd = xml.indexOf('</sheetData>', dataStart);
+  final dataXml =
+      dataEnd > dataStart ? xml.substring(dataStart, dataEnd + 12) : '';
+
+  // 解析每一行 <row r="N">...</row>
+  for (final rowMatch in RegExp(r'<row[^>]*r="(\d+)"[^>]*>(.*?)</row>',
+          dotAll: true)
+      .allMatches(dataXml)) {
+    final rowNum = int.tryParse(rowMatch.group(1)!) ?? 0;
+    final rowContent = rowMatch.group(2) ?? '';
+
+    // 解析该行内所有单元格 <c r="A1" t="s|inlineStr"><v>值</v></c>
+    final cells = <dynamic>[];
+
+    // 先收集有明确列号的单元格
+    final colValues = <int, dynamic>{};
+    for (final cMatch in RegExp(
+            r'<c\s+r="([A-Z]+)(\d+)"(?:\s+t="([^"]*)")?[^>]*>(?:<v>([^<]*)</v>)?(?:<is><t>([^<]*)</t></is>)?</c>')
+        .allMatches(rowContent)) {
+      final colRef = cMatch.group(1)!; // 如 "A", "B", "AA"
+      final type = cMatch.group(3);     // "s"=共享字符串, "inlineStr", null=数字
+      final vText = cMatch.group(4);    // <v> 内容
+      final inlineT = cMatch.group(5);  // <is><t> 内容
+
+      final colIdx = _colRefToIndex(colRef);
+
+      dynamic value;
+      if (type == 's' && vText != null) {
+        // 共享字符串索引
+        final idx = int.tryParse(vText);
+        value = (idx != null && idx < sharedStrings.length)
+            ? sharedStrings[idx]
+            : (vText.isNotEmpty ? vText : '');
+      } else if (inlineT != null) {
+        value = inlineT;
+      } else if (vText != null && vText.isNotEmpty) {
+        // 尝试解析为数字
+        final d = double.tryParse(vText);
+        if (d != null) {
+          // 整数返回 int，小数返回 double
+          value = d == d.roundToDouble() ? d.toInt() : d;
+        } else {
+          value = vText;
+        }
+      } else {
+        value = '';
+      }
+      colValues[colIdx] = value;
+    }
+
+    // 构建完整行（稀疏→密集）
+    if (colValues.isNotEmpty) {
+      final maxCol = colValues.keys.reduce((a, b) => a > b ? a : b);
+      for (int i = 0; i <= maxCol; i++) {
+        cells.add(colValues[i] ?? '');
+      }
+      rows.add(cells);
+    }
+  }
+
+  return rows;
+}
+
+/// 列引用转 0-based 索引：A=0, B=1, ..., Z=25, AA=26, ...
+int _colRefToIndex(String ref) {
+  int idx = 0;
+  for (var i = 0; i < ref.length; i++) {
+    idx = idx * 26 + (ref.codeUnitAt(i) - 64); // 'A'=65
+  }
+  return idx - 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Raw 版本的辅助方法（与原版逻辑相同，但操作 [_RawWorkbook]）
+// ═══════════════════════════════════════════════════════════════════
+
+Map<String, bool> _scanImportableRaw(_RawWorkbook wb) {
+  final map = <String, bool>{};
+  for (final entry in wb.tables.entries) {
+    map[entry.key] = _sheetImportableRaw(entry.value, entry.key);
+  }
+  return map;
+}
+
+bool _sheetImportableRaw(_RawTable table, String name) {
+  int? headerIdx;
+  for (int r = 0; r < table.rows.length; r++) {
+    if (table.rows[r].any((c) => (_text(c) ?? '').contains('姓名'))) {
+      headerIdx = r;
+      break;
+    }
+  }
+  if (headerIdx == null) return false;
+  final header = table.rows[headerIdx];
+  if (_isNonPerfSheet(name, header)) return false;
+  for (int r = headerIdx + 1; r < table.rows.length; r++) {
+    for (final c in table.rows[r]) {
+      final v = _raw(c);
+      if (v is num && v != 0) return true;
+    }
+  }
+  return false;
+}
+
+String? _pickDefaultSheetRaw(_RawWorkbook wb) {
+  const preferred = ['绩效', '铲车', '装载机', '挖掘机'];
+  for (final k in preferred) {
+    for (final name in wb.tables.keys) {
+      if (name.contains(k) &&
+          _sheetImportableRaw(wb.tables[name]!, name)) {
+        return name;
+      }
+    }
+  }
+  for (final name in wb.tables.keys) {
+    if (_sheetImportableRaw(wb.tables[name]!, name)) return name;
+  }
+  return null;
 }

@@ -24,6 +24,8 @@ dependencies:
 
   # Excel 解析（导入微信分享的表格，对自定义 numFmt 更宽容）
   spreadsheet_decoder: ^2.3.0
+  # ZIP 解压（用于 xlsx fallback 解析器，当 spreadsheet_decoder 不支持批注/复杂格式时）
+  archive: ^3.4.0
   # 接收微信/系统分享的文件（1.8.x 兼容 Dart 3.5.4 / Flutter 3.24.5；1.9.0 起要求 Dart>=3.10）
   receive_sharing_intent: ^1.8.1
   # App 内手动选择本地文件导入
