@@ -71,7 +71,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   try {
     final decoder = SpreadsheetDecoder.decodeBytes(bytes);
     raw = _fromSpreadsheetDecoder(decoder);
-  } on UnsupportedError catch (e) {
+  } on UnsupportedError {
     // Fallback：纯 Dart ZIP+XML 解析（兼容含批注/drawings/超大 styles 的 xlsx）
     raw = _fallbackDecodeBytes(bytes);
   }
@@ -651,7 +651,6 @@ List<List<dynamic>> _parseSheetXml(String xml, List<String> sharedStrings) {
   for (final rowMatch in RegExp(r'<row[^>]*r="(\d+)"[^>]*>(.*?)</row>',
           dotAll: true)
       .allMatches(dataXml)) {
-    final rowNum = int.tryParse(rowMatch.group(1)!) ?? 0;
     final rowContent = rowMatch.group(2) ?? '';
 
     // 解析该行内所有单元格 <c r="A1" t="s|inlineStr"><v>值</v></c>

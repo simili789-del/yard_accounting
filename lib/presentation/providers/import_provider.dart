@@ -5,6 +5,7 @@ import '../../data/repositories/excel_importer.dart';
 import '../../data/repositories/record_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../domain/entities/work_record.dart';
+import '../../domain/models/imported_row.dart';
 import '../providers/repository_providers.dart';
 
 /// 导入向导的 UI 状态。
