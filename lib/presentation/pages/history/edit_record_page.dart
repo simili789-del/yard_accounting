@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
+import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../providers/stats_provider.dart';
 import '../../widgets/job_type_card.dart';
 
 /// 编辑历史记录页面：可修改姓名/车号/班次/作业数量/备注，保存回 Hive。
@@ -149,6 +151,12 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
       boatName: _boatName.isEmpty ? null : _boatName,
     );
     ref.read(recordRepositoryProvider).saveRecord(updated);
+    // 编辑保存后刷新全部记录相关 Provider，确保统计/今日摘要/近7天同步更新
+    ref.invalidate(historyRecordsProvider);
+    ref.invalidate(last7DaysSummaryProvider);
+    ref.invalidate(monthlyStatsProvider);
+    ref.invalidate(lastRecordProvider);
+    ref.invalidate(dayRecordsProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已保存修改')),
     );

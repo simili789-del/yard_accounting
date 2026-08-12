@@ -623,6 +623,9 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                         .replaceAllRecords(records);
                     ref.invalidate(historyRecordsProvider);
                     ref.invalidate(lastRecordProvider);
+                    ref.invalidate(last7DaysSummaryProvider);
+                    ref.invalidate(monthlyStatsProvider);
+                    ref.invalidate(dayRecordsProvider);
                     if (mounted) _snack('已恢复 ${records.length} 条记录');
                   }),
                 ),
@@ -637,6 +640,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     if (!ok) return;
                     await ref.read(recordRepositoryProvider).seedSampleData();
                     ref.invalidate(historyRecordsProvider);
+                    ref.invalidate(lastRecordProvider);
+                    ref.invalidate(last7DaysSummaryProvider);
+                    ref.invalidate(monthlyStatsProvider);
+                    ref.invalidate(dayRecordsProvider);
                     if (mounted) _snack('已写入示例数据');
                   }),
                 ),
@@ -655,6 +662,9 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     ref.invalidate(historyRecordsProvider);
                     ref.invalidate(lastRecordProvider);
                     ref.invalidate(selectedDateRecordProvider);
+                    ref.invalidate(last7DaysSummaryProvider);
+                    ref.invalidate(monthlyStatsProvider);
+                    ref.invalidate(dayRecordsProvider);
                     if (mounted) _snack('已清空全部数据');
                   }),
                 ),

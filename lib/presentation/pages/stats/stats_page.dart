@@ -20,7 +20,7 @@ class StatsPage extends ConsumerWidget {
     final month = ref.watch(statsMonthProvider);
     final stats = ref.watch(monthlyStatsProvider);
     final workerFilter = ref.watch(statsWorkerFilterProvider);
-    final allWorkers = ref.watch(monthlyStatsProvider).incomeByWorker.keys.toList();
+    final allWorkers = stats.incomeByWorker.keys.toList();
 
     return Scaffold(
       appBar: YardAppBar(

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/record_repository.dart';
 import '../../domain/entities/work_record.dart';
 import 'app_settings_provider.dart';
+import 'history_provider.dart';
 import 'repository_providers.dart';
+import 'stats_provider.dart';
 
 /// 首页当前选中的记账日期。
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -129,5 +131,11 @@ class SelectedDateRecordNotifier
     await _repository.saveRecord(current);
     _undoStack.clear();
     state = AsyncData(current);
+    // 刷新所有依赖记录的聚合 Provider，使首页摘要/统计/明细/上次详情立即更新
+    _ref.invalidate(dayRecordsProvider);
+    _ref.invalidate(monthlyStatsProvider);
+    _ref.invalidate(historyRecordsProvider);
+    _ref.invalidate(lastRecordProvider);
+    _ref.invalidate(last7DaysSummaryProvider);
   }
 }

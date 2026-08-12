@@ -32,6 +32,12 @@ class HistoryPage extends ConsumerWidget {
                 await ref
                     .read(recordRepositoryProvider)
                     .deleteRecords(selected.toList());
+                // 批量删除后同样刷新全部记录相关 Provider，否则列表不重绘
+                ref.invalidate(historyRecordsProvider);
+                ref.invalidate(last7DaysSummaryProvider);
+                ref.invalidate(monthlyStatsProvider);
+                ref.invalidate(lastRecordProvider);
+                ref.invalidate(dayRecordsProvider);
                 ref.read(selectedRecordIdsProvider.notifier).state = {};
               },
             ),
