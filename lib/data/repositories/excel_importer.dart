@@ -185,8 +185,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   String? lastBoat; // 挖掘机表船名常合并单元格留空，向上延续
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
-    // 归一化姓名/船名内部空白（如「玛蒂尔 达」→「玛蒂尔达」）
-    final name = (_text(rows[r][nameCol]) ?? '').replaceAll(RegExp(r'\s+'), '');
+    // 归一化姓名/船名内部空白（如「玛蒂尔 达」→「玛蒂尔达」），
+    // 同时去除全角空格与零宽字符（Excel 复制粘贴常带入）。
+    final name = (_text(rows[r][nameCol]) ?? '')
+        .replaceAll(RegExp(r'[\s\u00A0\u200B\u200C\u200D\ufeff]'), '')
+        .replaceAll('　', '');
     final rowBoat =
         boatCol != null ? (_text(rows[r][boatCol]) ?? '').replaceAll(RegExp(r'\s+'), '') : null;
     // 跳过重复表头行（分页处常再写一行『姓名/车号』）

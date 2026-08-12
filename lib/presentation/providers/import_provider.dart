@@ -101,26 +101,36 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     );
     try {
       final result = parseXlsx(path, sheetName: sheetName, headerRow: headerRow);
-      final names = result.rows.map((r) => r.workerName).toSet();
+      // 归一化辅助：去除所有空白（含零宽/不可见字符），用于稳健匹配。
+      String normalize(String s) =>
+          s.replaceAll(RegExp(r'\s+'), '').replaceAll('　', '');
+
+      final names = result.rows.map((r) => normalize(r.workerName)).toSet();
       final repo = _ref.read(settingsRepositoryProvider);
-      final defaultName = repo.getAppSettings().defaultWorkerName.trim();
-      final fixed = repo.getFixedWorkers();
+      final defaultName = normalize(repo.getAppSettings().defaultWorkerName);
+      final fixed = repo.getFixedWorkers()
+          .map((w) => normalize(w))
+          .toList();
       final fixedSet = fixed.toSet();
 
       // 识别设置页「默认姓名」：命中则默认只勾该人并强制仅导他；
       // 否则回退到固定人员名单；再否则默认全选。
+      // 匹配均使用归一化后的字符串，兼容 Excel 单元格含不可见字符/空格差异。
       String? focusedWorker;
       Set<String> selected;
       bool enforce;
       if (defaultName.isNotEmpty && names.contains(defaultName)) {
-        focusedWorker = defaultName;
-        selected = {defaultName};
+        focusedWorker = repo.getAppSettings().defaultWorkerName.trim();
+        selected = {focusedWorker};
         enforce = true;
       } else if (fixedSet.isNotEmpty) {
-        selected = names.intersection(fixedSet);
+        selected = names.intersection(fixedSet)
+            .map((n) => _findOriginal(n, result.rows))
+            .whereType<String>()
+            .toSet();
         enforce = true;
       } else {
-        selected = names;
+        selected = result.rows.map((r) => r.workerName).toSet();
         enforce = false;
       }
 
@@ -255,6 +265,16 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
   int get lastImportedCount => state.importedCount;
 
   void reset() => state = ImportUiState();
+
+  /// 从归一化后的姓名在 rows 中找到原始 workerName（保留原始格式用于 selectedWorkers）。
+  static String? _findOriginal(String normalized, List<ImportedRow> rows) {
+    for (final r in rows) {
+      if (r.workerName.replaceAll(RegExp(r'\s+'), '') == normalized) {
+        return r.workerName;
+      }
+    }
+    return null;
+  }
 }
 
 /// 存放「微信/系统分享进来的待导入文件」路径；RootShell 监听后跳转向导并消费置空。
