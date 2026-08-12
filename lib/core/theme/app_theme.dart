@@ -82,13 +82,17 @@ class AppTheme {
           borderSide: BorderSide(color: colorScheme.primary, width: 2),
         ),
       ),
-      textTheme: ThemeData().textTheme.copyWith(
+      // 必须基于当前 brightness 取默认文字色，否则深色模式下
+      // TextField 等输入文字会继承浅色主题的黑/灰色，导致看不清。
+      textTheme: ThemeData(brightness: brightness).textTheme.copyWith(
         titleLarge: const TextStyle(fontWeight: FontWeight.w700, height: 1.3),
         titleMedium: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
         headlineSmall: const TextStyle(
           fontWeight: FontWeight.w700,
           fontFeatures: [FontFeature.tabularFigures()], // 数字等宽对齐
         ),
+        bodyLarge: TextStyle(color: colorScheme.onSurface),
+        bodyMedium: TextStyle(color: colorScheme.onSurface),
         bodySmall: TextStyle(
           color: colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w500,
