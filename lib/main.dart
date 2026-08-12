@@ -87,8 +87,8 @@ class YardAccountingApp extends ConsumerWidget {
     return MaterialApp(
       title: '货场作业记账',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(primaryIndex: primaryIndex),
-      darkTheme: AppTheme.dark(primaryIndex: primaryIndex),
+      theme: AppTheme.light(primaryIndex),
+      darkTheme: AppTheme.dark(primaryIndex),
       themeMode: switch (themeMode) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
