@@ -88,8 +88,9 @@ class AppTheme {
       // 底部导航：选中项主色浅底高亮（indicator 由主题驱动，页面无需改）。
       navigationBarTheme: NavigationBarThemeData(
         indicatorColor: colorScheme.primaryContainer,
-        labelTextStyle:
-            WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        labelTextStyle: MaterialStateProperty.all<TextStyle?>(
+          const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
         height: 64,
       ),
       inputDecorationTheme: InputDecorationTheme(
