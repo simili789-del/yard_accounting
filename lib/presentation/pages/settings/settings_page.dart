@@ -160,8 +160,11 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                           flex: 2,
                           child: TextFormField(
                             initialValue: e.key,
-                            decoration: const InputDecoration(
-                              hintText: '作业类型',
+                            decoration: InputDecoration(
+                              labelText: '作业类型',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onFieldSubmitted: (v) {
                               final newName = v.trim();
@@ -182,6 +185,12 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                               decimal: true,
                             ),
                             textAlign: TextAlign.right,
+                            decoration: InputDecoration(
+                              labelText: '单价',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                             onFieldSubmitted: (v) {
                               final price = double.tryParse(v) ?? e.value;
                               ref
@@ -245,8 +254,11 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                   flex: 2,
                   child: TextFormField(
                     controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      hintText: '类型名称',
+                    decoration: InputDecoration(
+                      labelText: '类型名称',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
@@ -254,8 +266,11 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                 Expanded(
                   child: TextFormField(
                     controller: _priceCtrl,
-                    decoration: const InputDecoration(
-                      hintText: '单价',
+                    decoration: InputDecoration(
+                      labelText: '单价',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,

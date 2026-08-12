@@ -61,6 +61,27 @@ class AppTheme {
         indicatorColor: colorScheme.primaryContainer,
         elevation: 0,
       ),
+      // 深色模式下 TextField / TextFormField 文字不可见的修复：
+      // Card 内部 surfaceContainer 背景很深，必须显式指定输入框填充色与文字色，
+      // 否则默认文字色与背景对比度不足（尤其深色模式）。
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest,
+        hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+      ),
       textTheme: ThemeData().textTheme.copyWith(
         titleLarge: const TextStyle(fontWeight: FontWeight.w700, height: 1.3),
         titleMedium: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
