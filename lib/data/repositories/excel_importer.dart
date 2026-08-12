@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:excel2003/excel2003.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
 import '../../domain/entities/work_record.dart';
@@ -59,21 +60,28 @@ class ExcelParseResult {
   });
 }
 
-/// 解析 xlsx：定位表头行 → 清洗作业类型列名（剥离「1.8元」单价）→
+/// 解析 xlsx/xls：定位表头行 → 清洗作业类型列名（剥离「1.8元」单价）→
 /// 跳过合计/标题行 → 提取每个人各作业类型车数，并解析班次与日期。
 ///
-/// [sheetName] 不传则默认「铲车绩效表」；[headerRow] 不传则自动扫描含「姓名」的行。
+/// [sheetName] 不传则自动选中首个「看起来像司机绩效表」的工作表；
+/// [headerRow] 不传则自动扫描含「姓名」的行。
 ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final bytes = File(path).readAsBytesSync();
+  final lower = path.toLowerCase();
 
   // 主路径：spreadsheet_decoder（快速、功能全，但不支持批注/复杂格式）
   _RawWorkbook raw;
-  try {
-    final decoder = SpreadsheetDecoder.decodeBytes(bytes);
-    raw = _fromSpreadsheetDecoder(decoder);
-  } on UnsupportedError {
-    // Fallback：纯 Dart ZIP+XML 解析（兼容含批注/drawings/超大 styles 的 xlsx）
-    raw = _fallbackDecodeBytes(bytes);
+  if (lower.endsWith('.xls')) {
+    // 旧版 Excel 97-2003（BIFF8），微信/WPS 分享仍常见
+    raw = _fromExcel2003(bytes);
+  } else {
+    try {
+      final decoder = SpreadsheetDecoder.decodeBytes(bytes);
+      raw = _fromSpreadsheetDecoder(decoder);
+    } on UnsupportedError {
+      // Fallback：纯 Dart ZIP+XML 解析（兼容含批注/drawings/超大 styles 的 xlsx）
+      raw = _fallbackDecodeBytes(bytes);
+    }
   }
 
   final sheetNames = raw.tables.keys.toList();
@@ -544,6 +552,31 @@ _RawWorkbook _fromSpreadsheetDecoder(SpreadsheetDecoder decoder) {
   final tables = <String, _RawTable>{};
   for (final entry in decoder.tables.entries) {
     tables[entry.key] = _RawTable(entry.key, entry.value.rows);
+  }
+  return _RawWorkbook(tables);
+}
+
+/// 解析旧版 Excel 97-2003 (.xls) 文件（BIFF8），转为 [_RawWorkbook]。
+_RawWorkbook _fromExcel2003(Uint8List bytes) {
+  final reader = XlsReader.fromBytes(bytes);
+  reader.open();
+
+  final tables = <String, _RawTable>{};
+  for (int i = 0; i < reader.sheetCount; i++) {
+    final sheet = reader.sheet(i);
+    final rows = <List<dynamic>>[];
+    if (sheet.lastRow > sheet.firstRow && sheet.lastCol > sheet.firstCol) {
+      for (int r = sheet.firstRow; r < sheet.lastRow; r++) {
+        final row = <dynamic>[];
+        for (int c = sheet.firstCol; c < sheet.lastCol; c++) {
+          final v = sheet.cell(r, c);
+          // 将 null 统一成空字符串，与 xlsx 解析器行为一致
+          row.add(v ?? '');
+        }
+        rows.add(row);
+      }
+    }
+    tables[reader.sheetNames[i]] = _RawTable(reader.sheetNames[i], rows);
   }
   return _RawWorkbook(tables);
 }
