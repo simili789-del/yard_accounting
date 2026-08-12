@@ -323,7 +323,12 @@ class _DailyBarChart extends StatelessWidget {
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
                                 '${days[i].day}',
-                                style: const TextStyle(fontSize: 10),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
                               ),
                             );
                           },

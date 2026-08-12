@@ -126,10 +126,17 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('合计', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    '合计',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                  ),
                   Text(
                     '共 $totalQty 件 · ¥${totalAmount.toStringAsFixed(2)}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
                   ),
                 ],
               ),

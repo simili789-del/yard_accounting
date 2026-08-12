@@ -241,6 +241,7 @@ class _FilterPanel extends ConsumerWidget {
                       prefixIcon: Icon(Icons.search, size: 20),
                       hintText: '搜索姓名/车号',
                       contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      filled: true,
                     ),
                     onChanged: (v) => ref
                         .read(historyFilterProvider.notifier)
