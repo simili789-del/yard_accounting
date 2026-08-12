@@ -6,7 +6,10 @@ import '../../data/repositories/record_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
+import '../providers/history_provider.dart';
 import '../providers/repository_providers.dart';
+import '../providers/selected_date_record_provider.dart';
+import '../providers/stats_provider.dart';
 
 /// 导入向导的 UI 状态。
 class ImportUiState {
@@ -247,6 +250,13 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
       ));
     }
     await repo.saveImportedRecords(records);
+
+    // 5) 刷新所有记录相关 Provider，让首页/明细页/月报页立刻反映新数据
+    _ref.invalidate(historyRecordsProvider);
+    _ref.invalidate(lastRecordProvider);
+    _ref.invalidate(selectedDateRecordProvider);
+    _ref.invalidate(last7DaysSummaryProvider);
+    _ref.invalidate(monthlyStatsProvider);
 
     // 3) 沉淀固定人员名单 + 刷新联动
     await settings.setFixedWorkers(state.selectedWorkers.toList());
