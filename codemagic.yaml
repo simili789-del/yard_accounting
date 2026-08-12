@@ -11,6 +11,38 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+      - name: Pre-install Gradle 8.0 (bypass flaky wrapper download)
+        script: |
+          set -e
+          GRADLE_VER=8.0
+          GRADLE_ZIP="gradle-${GRADLE_VER}-all.zip"
+          GRADLE_URL="https://services.gradle.org/distributions/${GRADLE_ZIP}"
+          TMP_ZIP="/tmp/${GRADLE_ZIP}"
+          if [ -f "${TMP_ZIP}" ]; then
+            echo "Gradle zip already cached at ${TMP_ZIP}"
+          else
+            echo "Downloading ${GRADLE_ZIP} with retry..."
+            for i in 1 2 3 4 5; do
+              if curl -L --connect-timeout 30 --max-time 300 -o "${TMP_ZIP}" "${GRADLE_URL}"; then
+                echo "Download succeeded on attempt ${i}."
+                break
+              fi
+              echo "Attempt ${i} failed, retrying..."
+              rm -f "${TMP_ZIP}"
+              sleep 5
+            done
+            if [ ! -f "${TMP_ZIP}" ]; then
+              echo "ERROR: Failed to download Gradle after 5 attempts."
+              exit 1
+            fi
+          fi
+          echo "Gradle zip ready at ${TMP_ZIP}"
+          # 把 wrapper 的 distributionUrl 改为本地 file: 路径，彻底绕过网络下载
+          GRADLE_FILE_URL="file\\:${TMP_ZIP}"
+          sed -i.bak "s|^distributionUrl=.*|distributionUrl=${GRADLE_FILE_URL}|" \
+            android/gradle/wrapper/gradle-wrapper.properties
+          echo "Updated gradle-wrapper.properties:"
+          cat android/gradle/wrapper/gradle-wrapper.properties
       - name: Get Flutter packages
         script: flutter pub get
       - name: Generate code (Hive/Freezed)
