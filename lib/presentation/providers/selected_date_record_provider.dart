@@ -8,6 +8,13 @@ import 'repository_providers.dart';
 /// 首页当前选中的记账日期。
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
+/// 首页「上次作业详情」：取选中日期之前最近的一条记录。
+final lastRecordProvider = FutureProvider<WorkRecord?>((ref) async {
+  final repo = ref.watch(recordRepositoryProvider);
+  final date = ref.watch(selectedDateProvider);
+  return repo.getLatestBefore(date);
+});
+
 /// 根据选中日期加载/保存记录。
 final selectedDateRecordProvider =
     StateNotifierProvider<SelectedDateRecordNotifier, AsyncValue<WorkRecord>>(

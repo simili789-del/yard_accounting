@@ -80,6 +80,69 @@ class RecordRepository {
 
   List<WorkRecord> get all => _box.values.toList();
 
+  /// 取指定日期之前「最近的一条」记录，用于首页展示上次作业详情。
+  WorkRecord? getLatestBefore(DateTime date) {
+    final dayStart = DateTime(date.year, date.month, date.day);
+    final list = _box.values
+        .where((r) => r.date.isBefore(dayStart))
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return list.isNotEmpty ? list.first : null;
+  }
+
+  /// 全部记录（供备份导出）。
+  List<WorkRecord> getAllRecords() => _box.values.toList();
+
+  /// 按 id 写入单条记录（导入 CSV 时逐条写入）。
+  Future<void> putRecord(WorkRecord record) async =>
+      _box.put(record.id, record);
+
+  /// 用一批记录整体替换当前数据（从 JSON 备份恢复）。
+  Future<void> replaceAllRecords(List<WorkRecord> records) async {
+    await _box.clear();
+    final map = <String, WorkRecord>{for (final r in records) r.id: r};
+    await _box.putAll(map);
+  }
+
+  /// 清空全部记账记录。
+  Future<void> clearAllRecords() async => _box.clear();
+
+  /// 写入 3 条示例记录（当前月），便于初次体验。
+  Future<void> seedSampleData() async {
+    final now = DateTime.now();
+    final samples = [
+      _sample(now, 0, '张三', '鲁B12345', ShiftType.day, {'装车': 50, '卸车': 30}, '示例数据'),
+      _sample(now, 1, '李四', '鲁B67890', ShiftType.night, {'倒短': 40}, '示例数据'),
+      _sample(now, 2, '王五', '鲁B11111', ShiftType.day, {'归垛': 60}, '示例数据'),
+    ];
+    for (final s in samples) {
+      await _box.put(s.id, s);
+    }
+  }
+
+  WorkRecord _sample(
+    DateTime now,
+    int dayOffset,
+    String name,
+    String vehicle,
+    ShiftType shift,
+    Map<String, int> jobs,
+    String remark,
+  ) {
+    final d = DateTime(now.year, now.month, now.day - dayOffset);
+    final id =
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return WorkRecord(
+      id: id,
+      date: d,
+      workerName: name,
+      vehicleNo: vehicle,
+      shift: shift,
+      jobQuantities: jobs,
+      remark: remark,
+    );
+  }
+
   String _dateKey(DateTime date) =>
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }

@@ -1,10 +1,16 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/util/share_file.dart';
+import '../../../data/serialization/record_serialization.dart';
 import '../../../domain/entities/salary_settings.dart';
 import '../../providers/app_settings_provider.dart';
+import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
@@ -508,11 +514,64 @@ class _TargetSectionState extends ConsumerState<_TargetSection> {
   }
 }
 
-class _BackupSection extends ConsumerWidget {
+class _BackupSection extends ConsumerStatefulWidget {
   const _BackupSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BackupSection> createState() => _BackupSectionState();
+}
+
+class _BackupSectionState extends ConsumerState<_BackupSection> {
+  bool _busy = false;
+
+  String get _stamp {
+    final n = DateTime.now();
+    return '${n.year}${n.month.toString().padLeft(2, '0')}'
+        '${n.day.toString().padLeft(2, '0')}'
+        '_${n.hour.toString().padLeft(2, '0')}'
+        '${n.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<bool> _confirm(String title, String content) async {
+    final r = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    return r ?? false;
+  }
+
+  /// 统一处理「忙碌状态 + 异常捕获」，子任务自行弹出成功提示。
+  Future<void> _run(Future<void> Function() task) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await task();
+    } catch (e) {
+      if (mounted) _snack('操作失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -524,24 +583,98 @@ class _BackupSection extends ConsumerWidget {
               children: [
                 _BackupButton(
                   label: '导出 JSON 备份',
-                  onPressed: () => _showSnack(context, '导出 JSON 备份功能开发中'),
+                  loading: _busy,
+                  onPressed: () => _run(() async {
+                    final repo = ref.read(recordRepositoryProvider);
+                    final records = repo.getAllRecords();
+                    if (records.isEmpty) {
+                      if (mounted) _snack('暂无记录可导出');
+                      return;
+                    }
+                    final json = RecordSerialization.toJson(records);
+                    await shareTextFile(json, '货场记账备份_$_stamp.json');
+                    if (mounted) _snack('已导出 ${records.length} 条记录');
+                  }),
                 ),
                 _BackupButton(
                   label: '从 JSON 恢复',
-                  onPressed: () => _showSnack(context, '从 JSON 恢复功能开发中'),
+                  loading: _busy,
+                  onPressed: () => _run(() async {
+                    final picked = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['json'],
+                    );
+                    final path = picked?.files.single.path;
+                    if (path == null) return;
+                    final content = await File(path).readAsString();
+                    final records = RecordSerialization.fromJson(content);
+                    if (records.isEmpty) {
+                      if (mounted) _snack('文件中没有有效记录');
+                      return;
+                    }
+                    final ok = await _confirm(
+                      '恢复备份',
+                      '将用 ${records.length} 条记录覆盖当前全部数据，确定继续？',
+                    );
+                    if (!ok) return;
+                    await ref
+                        .read(recordRepositoryProvider)
+                        .replaceAllRecords(records);
+                    ref.invalidate(historyRecordsProvider);
+                    if (mounted) _snack('已恢复 ${records.length} 条记录');
+                  }),
                 ),
                 _BackupButton(
                   label: '从 CSV 导入记录',
-                  onPressed: () => _showSnack(context, '从 CSV 导入功能开发中'),
+                  loading: _busy,
+                  onPressed: () => _run(() async {
+                    final picked = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['csv'],
+                    );
+                    final path = picked?.files.single.path;
+                    if (path == null) return;
+                    final content = await File(path).readAsString();
+                    final records = RecordSerialization.fromCsv(content);
+                    if (records.isEmpty) {
+                      if (mounted) _snack('CSV 中没有有效记录');
+                      return;
+                    }
+                    await ref
+                        .read(recordRepositoryProvider)
+                        .saveImportedRecords(records);
+                    ref.invalidate(historyRecordsProvider);
+                    if (mounted) _snack('已导入 ${records.length} 条记录');
+                  }),
                 ),
                 _BackupButton(
                   label: '恢复示例数据',
-                  onPressed: () => _showSnack(context, '恢复示例数据功能开发中'),
+                  loading: _busy,
+                  onPressed: () => _run(() async {
+                    final ok = await _confirm(
+                      '恢复示例数据',
+                      '将写入 3 条示例记录（已存在的日期会被覆盖），确定？',
+                    );
+                    if (!ok) return;
+                    await ref.read(recordRepositoryProvider).seedSampleData();
+                    ref.invalidate(historyRecordsProvider);
+                    if (mounted) _snack('已写入示例数据');
+                  }),
                 ),
                 _BackupButton(
                   label: '清空全部数据',
                   foregroundColor: Colors.red,
-                  onPressed: () => _showSnack(context, '清空全部数据功能开发中'),
+                  loading: _busy,
+                  onPressed: () => _run(() async {
+                    final ok = await _confirm(
+                      '清空全部数据',
+                      '将删除所有记账记录，且不可恢复，确定？',
+                    );
+                    if (!ok) return;
+                    await ref.read(recordRepositoryProvider).clearAllRecords();
+                    ref.invalidate(historyRecordsProvider);
+                    if (mounted) _snack('已清空全部数据');
+                  }),
                 ),
               ],
             ),
@@ -550,22 +683,19 @@ class _BackupSection extends ConsumerWidget {
       ],
     );
   }
-
-  void _showSnack(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
 }
 
 class _BackupButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
   final Color? foregroundColor;
+  final bool loading;
 
   const _BackupButton({
     required this.label,
     required this.onPressed,
     this.foregroundColor,
+    this.loading = false,
   });
 
   @override
@@ -573,12 +703,18 @@ class _BackupButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: TextButton(
-        onPressed: onPressed,
+        onPressed: loading ? null : onPressed,
         style: TextButton.styleFrom(
           foregroundColor: foregroundColor,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
-        child: Text(label),
+        child: loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(label),
       ),
     );
   }

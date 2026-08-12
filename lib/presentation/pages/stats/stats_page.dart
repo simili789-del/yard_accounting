@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/job_types.dart';
+import '../../../core/util/share_file.dart';
+import '../../../data/serialization/record_serialization.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/stats_provider.dart';
 import '../../widgets/section_header.dart';
@@ -34,15 +36,6 @@ class StatsPage extends ConsumerWidget {
             onPressed: () => ref
                 .read(statsMonthProvider.notifier)
                 .update((m) => DateTime(m.year, m.month + 1)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.ios_share),
-            tooltip: '导出工资单（功能开发中）',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('导出工资单功能开发中')),
-              );
-            },
           ),
         ],
       ),
@@ -91,13 +84,46 @@ class StatsPage extends ConsumerWidget {
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: FilledButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('CSV 导出功能开发中')),
-                );
+            child: FilledButton.icon(
+              icon: const Icon(Icons.file_download_outlined),
+              label: const Text('导出本月 CSV'),
+              onPressed: () async {
+                try {
+                  final month = ref.read(statsMonthProvider);
+                  final start = DateTime(month.year, month.month, 1);
+                  final end =
+                      DateTime(month.year, month.month + 1, 0, 23, 59, 59);
+                  final recs = ref
+                      .read(recordRepositoryProvider)
+                      .query(start: start, end: end);
+                  if (recs.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('本月暂无数据可导出')),
+                      );
+                    }
+                    return;
+                  }
+                  final csv = RecordSerialization.toCsv(
+                    recs,
+                    ref.read(unitPricesProvider),
+                  );
+                  final name =
+                      '货场记账_${month.year}${month.month.toString().padLeft(2, '0')}.csv';
+                  await shareTextFile(csv, name);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已导出 ${recs.length} 条记录')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('导出失败：$e')),
+                    );
+                  }
+                }
               },
-              child: const Text('导出本月 CSV'),
             ),
           ),
         ],

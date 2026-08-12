@@ -33,11 +33,6 @@ class HistoryPage extends ConsumerWidget {
                 ref.read(selectedRecordIdsProvider.notifier).state = {};
               },
             ),
-          IconButton(
-            icon: const Icon(Icons.file_download_outlined),
-            tooltip: '导出 CSV',
-            onPressed: () => _exportCsv(context, ref, records),
-          ),
         ],
       ),
       body: ListView(
@@ -85,12 +80,6 @@ class HistoryPage extends ConsumerWidget {
     final next = Set<String>.from(selected);
     selected.contains(id) ? next.remove(id) : next.add(id);
     ref.read(selectedRecordIdsProvider.notifier).state = next;
-  }
-
-  void _exportCsv(BuildContext context, WidgetRef ref, List<WorkRecord> records) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('CSV 导出功能开发中')),
-    );
   }
 }
 

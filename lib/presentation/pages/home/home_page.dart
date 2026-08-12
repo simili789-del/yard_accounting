@@ -38,12 +38,6 @@ class HomePage extends ConsumerWidget {
               }
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.content_copy_outlined),
-            tooltip: '复制昨日',
-            onPressed: () =>
-                ref.read(selectedDateRecordProvider.notifier).copyYesterday(),
-          ),
         ],
       ),
       body: const _HomeBody(),
@@ -99,26 +93,11 @@ class _HomeBody extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: SegmentedButton<ShiftType>(
-              segments: const [
-                ButtonSegment(
-                  value: ShiftType.day,
-                  label: Text('白班'),
-                  icon: Icon(Icons.wb_sunny_outlined),
-                ),
-                ButtonSegment(
-                  value: ShiftType.night,
-                  label: Text('夜班'),
-                  icon: Icon(Icons.nights_stay_outlined),
-                ),
-              ],
-              selected: {record.shift},
-              onSelectionChanged: (s) => ref
-                  .read(selectedDateRecordProvider.notifier)
-                  .updateBasicInfo(shift: s.first),
-            ),
+          _ShiftSelector(
+            shift: record.shift,
+            onChanged: (s) => ref
+                .read(selectedDateRecordProvider.notifier)
+                .updateBasicInfo(shift: s),
           ),
           const SizedBox(height: 8),
           ...jobTypes.map((jobType) => JobTypeCard(
@@ -148,8 +127,8 @@ class _HomeBody extends ConsumerWidget {
           _SaveButton(record: record, unitPrices: unitPrices),
           const SectionHeader('今日摘要'),
           _SummaryCards(record: record),
-          const SectionHeader('今日记录'),
-          const _TodayRecordsPlaceholder(),
+          const SectionHeader('上次作业详情'),
+          const _LastWorkDetail(),
         ],
       ),
     );
@@ -291,22 +270,209 @@ class _SummaryCards extends ConsumerWidget {
   }
 }
 
-class _TodayRecordsPlaceholder extends StatelessWidget {
-  const _TodayRecordsPlaceholder();
+class _ShiftSelector extends StatelessWidget {
+  final ShiftType shift;
+  final ValueChanged<ShiftType> onChanged;
+
+  const _ShiftSelector({required this.shift, required this.onChanged});
+
+  Widget _tile(
+    BuildContext context,
+    ShiftType value,
+    String label,
+    IconData icon,
+    Color active,
+  ) {
+    final selected = shift == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? active : active.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? active : active.withOpacity(0.35),
+              width: 2,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: selected ? Colors.white : active, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : active,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        alignment: Alignment.center,
-        child: Text(
-          '今天还没有记录',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade500,
-              ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          _tile(context, ShiftType.day, '白班', Icons.wb_sunny, Colors.orange),
+          const SizedBox(width: 12),
+          _tile(
+              context, ShiftType.night, '夜班', Icons.nights_stay, Colors.indigo),
+        ],
       ),
+    );
+  }
+}
+
+class _LastWorkDetail extends ConsumerWidget {
+  const _LastWorkDetail();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final last = ref.watch(lastRecordProvider);
+    return last.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (record) {
+        if (record == null) {
+          return Card(
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              alignment: Alignment.center,
+              child: Text(
+                '暂无历史记录',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: Colors.grey.shade500),
+              ),
+            ),
+          );
+        }
+        final unitPrices = ref.watch(unitPricesProvider);
+        final totalQty = record.jobQuantities.values.fold<int>(
+          0,
+          (a, b) => a + b,
+        );
+        final amount = record.amount(unitPrices);
+        final jobText = record.jobQuantities.entries
+            .where((e) => e.value > 0)
+            .map((e) => '${e.key} ${e.value}车')
+            .join(' · ');
+        final cs = Theme.of(context).colorScheme;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        DateFormat('yyyy-MM-dd').format(record.date),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: record.shift == ShiftType.day
+                            ? Colors.orange.withOpacity(0.15)
+                            : Colors.indigo.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            record.shift == ShiftType.day
+                                ? Icons.wb_sunny
+                                : Icons.nights_stay,
+                            size: 14,
+                            color: record.shift == ShiftType.day
+                                ? Colors.orange
+                                : Colors.indigo,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            record.shift.label,
+                            style: TextStyle(
+                              color: record.shift == ShiftType.day
+                                  ? Colors.orange
+                                  : Colors.indigo,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  record.workerName.isEmpty
+                      ? '（未填写姓名）'
+                      : record.workerName,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                if (record.vehicleNo.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '车号：${record.vehicleNo}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                if (jobText.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(jobText),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  '合计 $totalQty 车 · ¥${amount.toStringAsFixed(2)}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.primary,
+                      ),
+                ),
+                if (record.boatName?.isNotEmpty == true) ...[
+                  const SizedBox(height: 6),
+                  Text('船名：${record.boatName}'),
+                ],
+                if (record.remark?.isNotEmpty == true) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '备注：${record.remark}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey.shade600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
