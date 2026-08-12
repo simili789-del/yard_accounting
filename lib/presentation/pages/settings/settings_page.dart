@@ -621,30 +621,8 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                         .read(recordRepositoryProvider)
                         .replaceAllRecords(records);
                     ref.invalidate(historyRecordsProvider);
+                    ref.invalidate(lastRecordProvider);
                     if (mounted) _snack('已恢复 ${records.length} 条记录');
-                  }),
-                ),
-                _BackupButton(
-                  label: '从 CSV 导入记录',
-                  loading: _busy,
-                  onPressed: () => _run(() async {
-                    final picked = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ['csv'],
-                    );
-                    final path = picked?.files.single.path;
-                    if (path == null) return;
-                    final content = await File(path).readAsString();
-                    final records = RecordSerialization.fromCsv(content);
-                    if (records.isEmpty) {
-                      if (mounted) _snack('CSV 中没有有效记录');
-                      return;
-                    }
-                    await ref
-                        .read(recordRepositoryProvider)
-                        .saveImportedRecords(records);
-                    ref.invalidate(historyRecordsProvider);
-                    if (mounted) _snack('已导入 ${records.length} 条记录');
                   }),
                 ),
                 _BackupButton(
