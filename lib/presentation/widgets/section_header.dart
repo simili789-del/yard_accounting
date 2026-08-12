@@ -19,18 +19,18 @@ class SectionHeader extends StatelessWidget {
             children: [
               Container(
                 width: 3,
-                height: 14,
+                height: 16,
                 decoration: BoxDecoration(
                   color: cs.primary,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(1.5),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w700,
                     ),
               ),
             ],

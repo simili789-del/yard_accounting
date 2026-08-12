@@ -36,7 +36,7 @@ class RecordListCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             if (onToggleSelect != null)
@@ -73,7 +73,7 @@ class RecordListCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: shiftColor,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           record.shift.label,

@@ -38,7 +38,7 @@ class HistoryPage extends ConsumerWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
         children: [
           const SectionHeader('近7天各类型车数'),
           const _Last7DaysSummary(),

@@ -36,17 +36,16 @@ class StatCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    value,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: valueColor ?? cs.onSurface,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                  child:             Text(
+              value,
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(
+                    color: valueColor ?? cs.primary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
+            ),
                 ),
                 if (trailing != null) trailing!,
               ],
