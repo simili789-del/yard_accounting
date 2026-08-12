@@ -57,7 +57,20 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final decoder = SpreadsheetDecoder.decodeBytes(bytes);
   final sheetNames = decoder.tables.keys.toList();
 
-  final target = sheetName ?? _defaultSheet;
+  var target = sheetName ?? _defaultSheet;
+  if (!decoder.tables.containsKey(target)) {
+    // 默认表不存在时，回退到第一个含「姓名」表头的 sheet
+    // （兼容只含挖掘机表的文件，避免硬报错）
+    target = sheetNames.firstWhere(
+      (s) {
+        final t = decoder.tables[s];
+        if (t == null) return false;
+        return t.rows
+            .any((r) => r.any((c) => _text(c)?.contains('姓名') ?? false));
+      },
+      orElse: () => target,
+    );
+  }
   final table = decoder.tables[target];
   if (table == null) {
     throw Exception('未找到工作表「$target」，可用：${sheetNames.join('、')}');
@@ -79,9 +92,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     throw Exception('表头行 $headerIdx 超出表格范围');
   }
 
-  // 2) 归类列：姓名 / 车号 / 备注 单列标记，其余数值列作为作业类型列
+  // 2) 归类列：姓名 / 车号 / 备注 / 船名 / 日期 / 班次 单列标记；
+  //    签字等无用列、米/吨/方等非车次单位列直接忽略；
+  //    其余列：铲车表=作业类型列，挖掘机表=车数列（由 boatCol 是否存在决定模式）。
   final headerCells = rows[headerIdx];
-  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, qtyCol;
+  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol;
   final jobCols = <int, CleanedColumn>{};
   final rawJobCols = <int, String>{};
   for (int c = 0; c < headerCells.length; c++) {
@@ -91,11 +106,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       nameCol = c;
       continue;
     }
-    if (h == '车号') {
+    if (h == '车号' || h.contains('车牌') || h.contains('车辆')) {
       vehCol = c;
       continue;
     }
-    if (h == '备注') {
+    if (h.contains('备注') || h.contains('说明')) {
       remarkCol = c;
       continue;
     }
@@ -103,7 +118,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       boatCol = c;
       continue;
     }
-    // 显式「日期 / 班次 / 车数」列不参与作业类型识别（挖掘机表等）。
     if (h.contains('日期') || h.contains('时间')) {
       dateCol = c;
       continue;
@@ -112,8 +126,12 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       shiftCol = c;
       continue;
     }
-    if (h.contains('车数') || h.contains('数量') || h.contains('台班') || h.contains('方量') || h.contains('车次')) {
-      qtyCol = c;
+    // 签字 / 签名 / 复核 / 确认 等列不参与任何识别
+    if (h.contains('签字') || h.contains('签名') || h.contains('复核') || h.contains('确认')) {
+      continue;
+    }
+    // 米 / 吨 / 方 等非「车次」单位列（如封跺（米））不计入车数
+    if (h.contains('米') || h.contains('吨') || h.contains('方')) {
       continue;
     }
     jobCols[c] = _cleanColumn(h);
@@ -122,61 +140,38 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   if (nameCol == null) {
     throw Exception('表头中未找到「姓名」列，请检查表头行是否正确');
   }
-  // 船名特例：挖掘机绩效表的船名在「表头为空的列」（如 A 列），且数据行多为文本。
-  if (boatCol == null) {
-    for (int c = 0; c < headerCells.length; c++) {
-      final h = _text(headerCells[c]) ?? '';
-      if (h.isNotEmpty) continue;
-      if (c == nameCol || c == vehCol || c == remarkCol || jobCols.containsKey(c)) {
-        continue;
-      }
-      var texty = false;
-      for (int r = headerIdx + 1; r < rows.length; r++) {
-        final v = _text(rows[r][c]);
-        if (v != null && v.isNotEmpty && !_isNumericLike(v)) {
-          texty = true;
-          break;
-        }
-      }
-      if (texty) {
-        boatCol = c;
-        break;
-      }
-    }
-  }
+  // 挖掘机模式：存在「船名」列时，船名即作业类型（逐行向上延续填充），
+  // 其余数值列（jobCols）作为该车名的车数。
+  final isExcavator = boatCol != null;
 
-  // 3) 解析班次与日期（取自表头上一行的 meta 行）
+  // 3) 解析班次与日期（取自表头上一行的 meta 行；逐单元格，支持 Excel 序列日期）
   DateTime? date;
   var shift = ShiftType.day;
   if (headerIdx - 1 >= 0) {
-    final metaLine = rows[headerIdx - 1].map((c) => _text(c) ?? '').join(' ');
-    if (metaLine.contains('夜')) {
-      shift = ShiftType.night;
-    } else if (metaLine.contains('白')) {
-      shift = ShiftType.day;
-    }
-    final dm =
-        RegExp(r'(\d{4})\s*年-?(\d{1,2})/(\d{1,2})').firstMatch(metaLine);
-    if (dm != null) {
-      date = DateTime(
-        int.parse(dm.group(1)!),
-        int.parse(dm.group(2)!),
-        int.parse(dm.group(3)!),
-      );
+    for (final c in rows[headerIdx - 1]) {
+      final t = _text(c) ?? '';
+      if (t.contains('夜')) {
+        shift = ShiftType.night;
+      } else if (t.contains('白')) {
+        shift = ShiftType.day;
+      }
+      final d = _parseDateCell(c);
+      if (d != null) date = d;
     }
   }
 
-  // 4) 逐行提取人员车数；空姓名行可能是「合计行/说明行/空行」，需区分
+  // 4) 逐行提取人员车数；空姓名行是「合计行/说明行/空行」，需区分
   final result = <ImportedRow>[];
   final boatJobTypes = <String>{};
+  String? lastBoat; // 挖掘机表船名常合并单元格留空，向上延续
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
     final name = _text(rows[r][nameCol]) ?? '';
     final rowBoat = boatCol != null ? _text(rows[r][boatCol]) : null;
 
-    // 日期 / 班次列优先于表头 meta 行
+    // 日期 / 班次列优先于表头 meta 行（显式列存在时逐行覆盖）
     if (dateCol != null) {
-      final d = _parseDateCell(_text(rows[r][dateCol]) ?? '');
+      final d = _parseDateCell(rows[r][dateCol]);
       if (d != null) date = d;
     }
     if (shiftCol != null) {
@@ -191,9 +186,9 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     if (name.isEmpty) {
       // 合计行特征：车号列也空 且（作业列 或 车数列+船名）有值
       final hasJob = jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0) ||
-          (qtyCol != null &&
-              (_toInt(rows[r][qtyCol]) ?? 0) > 0 &&
-              (rowBoat?.isNotEmpty ?? false));
+          (boatCol != null &&
+              (rowBoat?.isNotEmpty ?? false) &&
+              jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0));
       final vehEmpty = vehCol == null || (_text(rows[r][vehCol])?.isEmpty ?? true);
       if (hasJob && vehEmpty) {
         final totals = <String, int>{};
@@ -201,9 +196,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
           final v = _toInt(rows[r][e.key]);
           if (v != null && v > 0) totals[e.value.name] = v;
         }
-        if (qtyCol != null && (rowBoat?.isNotEmpty ?? false)) {
-          final v = _toInt(rows[r][qtyCol]);
-          if (v != null && v > 0) totals[rowBoat!] = v;
+        if (boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
+          final sum = jobCols.keys
+              .map((c) => _toInt(rows[r][c]) ?? 0)
+              .fold(0, (a, b) => a + b);
+          if (sum > 0) totals[rowBoat!] = sum;
         }
         if (totals.isNotEmpty) sheetTotals = totals;
       }
@@ -216,43 +213,56 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         final v = _toInt(rows[r][e.key]);
         if (v != null && v > 0) totals[e.value.name] = v;
       }
-      if (qtyCol != null && (rowBoat?.isNotEmpty ?? false)) {
-        final v = _toInt(rows[r][qtyCol]);
-        if (v != null && v > 0) totals[rowBoat!] = v;
+      if (boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
+        final sum = jobCols.keys
+            .map((c) => _toInt(rows[r][c]) ?? 0)
+            .fold(0, (a, b) => a + b);
+        if (sum > 0) totals[rowBoat!] = sum;
       }
       if (totals.isNotEmpty) sheetTotals = totals;
       continue;
     }
 
-    final quantities = <String, int>{};
-    if (jobCols.isNotEmpty) {
+    if (isExcavator) {
+      // 挖掘机模式：船名=作业类型（向上延续填充），车数=各数值列之和
+      if (rowBoat != null && rowBoat.isNotEmpty) lastBoat = rowBoat;
+      final bt = (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : lastBoat;
+      if (bt == null) continue;
+      var cars = 0;
+      for (final c in jobCols.keys) {
+        cars += _toInt(rows[r][c]) ?? 0;
+      }
+      if (cars <= 0) continue;
+      boatJobTypes.add(bt);
+      result.add(ImportedRow(
+        workerName: name,
+        vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
+        remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        boatName: null,
+        quantities: {bt: cars},
+      ));
+    } else {
+      // 铲车模式：各作业类型列的车数
+      final quantities = <String, int>{};
       for (final e in jobCols.entries) {
         final q = _toInt(rows[r][e.key]) ?? 0;
         if (q > 0) quantities[e.value.name] = q;
       }
-    } else if (qtyCol != null && (rowBoat?.isNotEmpty ?? false)) {
-      // 挖掘机表：船名即作业类型，车数列即该车数
-      final q = _toInt(rows[r][qtyCol]) ?? 0;
-      if (q > 0) {
-        quantities[rowBoat!] = q;
-        boatJobTypes.add(rowBoat);
-      }
+      if (quantities.isEmpty) continue;
+      result.add(ImportedRow(
+        workerName: name,
+        vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
+        remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
+        quantities: quantities,
+      ));
     }
-    if (quantities.isEmpty) continue; // 该行无任何车数
-
-    result.add(ImportedRow(
-      workerName: name,
-      vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
-      remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
-      boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
-      quantities: quantities,
-    ));
   }
 
-  // 挖掘机表：将船名作为作业类型，供确认导入时写入作业类型清单
-  final effectiveJobCols = jobCols.isNotEmpty
-      ? jobCols.values.toList()
-      : boatJobTypes.map((n) => CleanedColumn(n, null)).toList();
+  // 挖掘机表：船名作为作业类型；铲车表：各作业类型列名作为作业类型
+  final effectiveJobCols = isExcavator
+      ? boatJobTypes.map((n) => CleanedColumn(n, null)).toList()
+      : jobCols.values.toList();
 
   return ExcelParseResult(
     sheetNames: sheetNames,
@@ -290,12 +300,21 @@ int? _toInt(dynamic cell) {
   return null;
 }
 
-/// 解析日期单元格：兼容 2026/8/12、2026-08-12、2026年8月12日 等写法。
-DateTime? _parseDateCell(String s) {
-  final v = s.trim();
+/// 解析日期单元格：兼容 Excel 序列日期（如 46240）、2026/8/12、
+/// 2026-08-12、2026年8月12日、2026年-8/6 等写法。
+DateTime? _parseDateCell(dynamic cell) {
+  // Excel 序列日期（数字）：基准 1899-12-30
+  if (cell is int || cell is double) {
+    final n = (cell as num).toDouble();
+    if (n > 20000 && n < 80000) {
+      return DateTime(1899, 12, 30).add(Duration(days: n.round()));
+    }
+    return null;
+  }
+  final v = (cell?.toString() ?? '').trim();
   if (v.isEmpty) return null;
-  final slash =
-      RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})').firstMatch(v);
+  // 2026-08-12 / 2026/8/12
+  final slash = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})').firstMatch(v);
   if (slash != null) {
     return DateTime(
       int.parse(slash.group(1)!),
@@ -303,6 +322,7 @@ DateTime? _parseDateCell(String s) {
       int.parse(slash.group(3)!),
     );
   }
+  // 2026年8月12日
   final cn =
       RegExp(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日').firstMatch(v);
   if (cn != null) {
@@ -312,13 +332,17 @@ DateTime? _parseDateCell(String s) {
       int.parse(cn.group(3)!),
     );
   }
+  // 2026年-8/6 或 2026年8/6（混合分隔符）
+  final mix =
+      RegExp(r'(\d{4})\s*年[^\d]*(\d{1,2})[^\d]*(\d{1,2})').firstMatch(v);
+  if (mix != null) {
+    return DateTime(
+      int.parse(mix.group(1)!),
+      int.parse(mix.group(2)!),
+      int.parse(mix.group(3)!),
+    );
+  }
   return DateTime.tryParse(v.replaceAll('/', '-'));
-}
-
-/// 是否像数字（用于区分船名文本与「加高12000」之类的说明数字）。
-bool _isNumericLike(String s) {
-  final cleaned = s.replaceAll(RegExp(r'[，,\s/]'), '');
-  return double.tryParse(cleaned) != null;
 }
 
 /// 清洗列名：剥离结尾的「(可选逗号) 数字 元」，提取单价。
