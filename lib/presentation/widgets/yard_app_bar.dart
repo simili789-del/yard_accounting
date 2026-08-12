@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../providers/app_settings_provider.dart';
 import '../providers/repository_providers.dart';
+import '../providers/selected_date_record_provider.dart';
 
 /// 统一顶部栏：Logo + 货场名称 + 日期 + 撤销/主题操作。
 ///
@@ -80,11 +81,19 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ...?actions,
         IconButton(
           icon: const Icon(Icons.undo_outlined),
-          tooltip: '撤销（功能开发中）',
+          tooltip: '撤销',
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('撤销功能开发中')),
-            );
+            final notifier = ref.read(selectedDateRecordProvider.notifier);
+            if (notifier.canUndo) {
+              notifier.undo();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已撤销上一步')),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('没有可撤销的操作')),
+              );
+            }
           },
         ),
         IconButton(
