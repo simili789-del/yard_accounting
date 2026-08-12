@@ -12,6 +12,7 @@ import '../../../domain/entities/salary_settings.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../providers/selected_date_record_provider.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
 
@@ -650,7 +651,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     );
                     if (!ok) return;
                     await ref.read(recordRepositoryProvider).clearAllRecords();
+                    // 刷新所有依赖记录数据的 Provider，确保首页/明细页/统计页均无残留
                     ref.invalidate(historyRecordsProvider);
+                    ref.invalidate(lastRecordProvider);
+                    ref.invalidate(selectedDateRecordProvider);
                     if (mounted) _snack('已清空全部数据');
                   }),
                 ),
