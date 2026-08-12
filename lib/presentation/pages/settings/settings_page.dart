@@ -136,10 +136,13 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
             child: Column(
               children: [
                 if (entries.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text('暂无作业类型，可在下方添加',
-                        style: TextStyle(color: Colors.grey)),
+                        style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
                   ),
                 for (final e in entries)
                   Padding(
@@ -664,7 +667,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                 ),
                 _BackupButton(
                   label: '清空全部数据',
-                  foregroundColor: Colors.red,
+                  foregroundColor: Theme.of(context).colorScheme.error,
                   loading: _busy,
                   onPressed: () => _run(() async {
                     final ok = await _confirm(

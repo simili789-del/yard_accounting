@@ -152,7 +152,9 @@ class _SheetSelector extends StatelessWidget {
                       : Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: Colors.grey),
+                          ?.copyWith(
+                              color:
+                                  Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               );
             })
@@ -298,11 +300,16 @@ class _ReconcilePanel extends StatelessWidget {
                   children: [
                     Expanded(child: Text(col)),
                     Text('表格 $t',
-                        style: TextStyle(color: bad ? Colors.red : null)),
+                        style: TextStyle(
+                            color: bad
+                                ? Theme.of(context).colorScheme.error
+                                : null)),
                     const SizedBox(width: 12),
                     Text('已选 $c',
                         style: TextStyle(
-                          color: bad ? Colors.red : null,
+                          color: bad
+                              ? Theme.of(context).colorScheme.error
+                              : null,
                           fontWeight: bad ? FontWeight.bold : null,
                         )),
                   ],

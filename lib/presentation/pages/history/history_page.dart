@@ -423,7 +423,7 @@ class _EmptyPlaceholder extends StatelessWidget {
         child: Text(
           '暂无符合条件的记录',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
       ),

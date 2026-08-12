@@ -363,10 +363,12 @@ class _LastWorkDetail extends ConsumerWidget {
               alignment: Alignment.center,
               child: Text(
                 '暂无历史记录',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: Colors.grey.shade500),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
               ),
             ),
           );
@@ -478,7 +480,10 @@ class _LastWorkDetail extends ConsumerWidget {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: Colors.grey.shade600),
+                        ?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ],
               ],
