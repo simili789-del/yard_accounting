@@ -37,6 +37,18 @@ class UnitPricesNotifier extends StateNotifier<Map<String, double>> {
     state = Map<String, double>.from(state)..remove(jobType);
   }
 
+  /// 重命名作业类型：保留原单价，旧名删除、新名写入。
+  void rename(String oldName, String newName) {
+    if (oldName == newName) return;
+    final price = state[oldName] ?? 1.0;
+    _repo.setUnitPrice(newName, price);
+    _repo.removeJobType(oldName);
+    final next = Map<String, double>.from(state);
+    next.remove(oldName);
+    next[newName] = price;
+    state = next;
+  }
+
   void add(String jobType, double price) {
     _repo.setUnitPrice(jobType, price);
     state = Map<String, double>.from(state)..[jobType] = price;

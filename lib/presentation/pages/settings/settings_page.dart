@@ -20,9 +20,7 @@ class SettingsPage extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 32),
         children: const [
           _ProfileSection(),
-          _UnitPriceSection(),
-          _JobTypeManageSection(),
-          _BoatNameSection(),
+          _JobTypePriceSection(),
           _SalarySection(),
           _AppearanceSection(),
           _TargetSection(),
@@ -107,113 +105,99 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
   }
 }
 
-class _UnitPriceSection extends ConsumerWidget {
-  const _UnitPriceSection();
+class _JobTypePriceSection extends ConsumerStatefulWidget {
+  const _JobTypePriceSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unitPrices = ref.watch(unitPricesProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader('单价设置（元/车）'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: unitPrices.entries.map((e) {
-                final color = DefaultJobTypes.colorOf(e.key);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(e.key)),
-                      SizedBox(
-                        width: 80,
-                        child: TextFormField(
-                          initialValue: e.value.toStringAsFixed(2),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          textAlign: TextAlign.right,
-                          onFieldSubmitted: (v) {
-                            final price = double.tryParse(v) ?? e.value;
-                            ref
-                                .read(unitPricesProvider.notifier)
-                                .setPrice(e.key, price);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  ConsumerState<_JobTypePriceSection> createState() =>
+      _JobTypePriceSectionState();
 }
 
-class _JobTypeManageSection extends ConsumerWidget {
-  const _JobTypeManageSection();
-
+class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final unitPrices = ref.watch(unitPricesProvider);
+    final entries = unitPrices.entries.toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader('作业类型管理'),
+        const SectionHeader('作业类型与单价（元/车）'),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
-              children: unitPrices.entries.map((e) {
-                final color = DefaultJobTypes.colorOf(e.key);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text('${e.key} (¥${e.value.toStringAsFixed(2)}/车)'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          ref.read(unitPricesProvider.notifier).remove(e.key);
-                        },
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text('删除'),
-                      ),
-                    ],
+              children: [
+                if (entries.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('暂无作业类型，可在下方添加',
+                        style: TextStyle(color: Colors.grey)),
                   ),
-                );
-              }).toList(),
+                for (final e in entries)
+                  Padding(
+                    key: ValueKey(e.key),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: DefaultJobTypes.colorOf(e.key),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            initialValue: e.key,
+                            decoration: const InputDecoration(
+                              hintText: '作业类型',
+                            ),
+                            onFieldSubmitted: (v) {
+                              final newName = v.trim();
+                              if (newName.isNotEmpty && newName != e.key) {
+                                ref
+                                    .read(unitPricesProvider.notifier)
+                                    .rename(e.key, newName);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 1,
+                          child: TextFormField(
+                            initialValue: e.value.toStringAsFixed(2),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            textAlign: TextAlign.right,
+                            onFieldSubmitted: (v) {
+                              final price = double.tryParse(v) ?? e.value;
+                              ref
+                                  .read(unitPricesProvider.notifier)
+                                  .setPrice(e.key, price);
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          onPressed: () =>
+                              ref.read(unitPricesProvider.notifier).remove(e.key),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                const _AddJobTypeCard(),
+              ],
             ),
           ),
         ),
-        const _AddJobTypeCard(),
       ],
     );
   }
@@ -595,108 +579,6 @@ class _BackupButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         child: Text(label),
-      ),
-    );
-  }
-}
-
-class _BoatNameSection extends ConsumerWidget {
-  const _BoatNameSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final boatNames = ref.watch(appSettingsProvider).boatNames;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader('船名库管理'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                if (boatNames.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('暂无船名，可在下方添加',
-                        style: TextStyle(color: Colors.grey)),
-                  ),
-                ...boatNames.map((name) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.directions_boat_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(name)),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
-                            onPressed: () {
-                              final next = List<String>.from(boatNames)
-                                ..remove(name);
-                              ref
-                                  .read(appSettingsProvider.notifier)
-                                  .updateBoatNames(next);
-                            },
-                          ),
-                        ],
-                      ),
-                    )),
-                const _AddBoatNameCard(),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AddBoatNameCard extends ConsumerStatefulWidget {
-  const _AddBoatNameCard();
-
-  @override
-  ConsumerState<_AddBoatNameCard> createState() => _AddBoatNameCardState();
-}
-
-class _AddBoatNameCardState extends ConsumerState<_AddBoatNameCard> {
-  final _ctrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextFormField(
-              controller: _ctrl,
-              decoration: const InputDecoration(hintText: '新增船名'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          FilledButton(
-            onPressed: () {
-              final name = _ctrl.text.trim();
-              if (name.isNotEmpty) {
-                final cur = ref.read(appSettingsProvider).boatNames;
-                if (!cur.contains(name)) {
-                  ref
-                      .read(appSettingsProvider.notifier)
-                      .updateBoatNames([...cur, name]);
-                }
-                _ctrl.clear();
-              }
-            },
-            child: const Text('添加'),
-          ),
-        ],
       ),
     );
   }
