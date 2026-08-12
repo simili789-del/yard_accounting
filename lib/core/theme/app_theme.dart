@@ -42,7 +42,8 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
       // iOS 18 风格：大圆角、无投影、贴底容器色卡片。
-      cardTheme: CardThemeData(
+      // 注意：CI 实际 Flutter < 3.10，使用 CardTheme（CardThemeData 在该版本不存在）。
+      cardTheme: CardTheme(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
@@ -63,7 +64,7 @@ class AppTheme {
       textTheme: ThemeData().textTheme.copyWith(
         titleLarge: const TextStyle(fontWeight: FontWeight.w700, height: 1.3),
         titleMedium: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
-        headlineSmall: TextStyle(
+        headlineSmall: const TextStyle(
           fontWeight: FontWeight.w700,
           fontFeatures: const [FontFeature.tabularFigures()], // 数字等宽对齐
         ),
