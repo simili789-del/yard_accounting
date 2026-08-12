@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
+import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
 import '../../widgets/job_type_card.dart';
@@ -126,7 +127,7 @@ class _HomeBody extends ConsumerWidget {
           const SizedBox(height: 16),
           _SaveButton(record: record, unitPrices: unitPrices),
           const SectionHeader('今日摘要'),
-          _SummaryCards(record: record),
+          _SummaryCards(date: selectedDate),
           const SectionHeader('上次作业详情'),
           const _LastWorkDetail(),
         ],
@@ -233,15 +234,28 @@ class _SaveButton extends ConsumerWidget {
 }
 
 class _SummaryCards extends ConsumerWidget {
-  final WorkRecord record;
+  final DateTime date;
 
-  const _SummaryCards({required this.record});
+  const _SummaryCards({required this.date});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unitPrices = ref.watch(unitPricesProvider);
-    final totalAmount = record.amount(unitPrices);
-    final totalQty = record.jobQuantities.values.fold<int>(0, (a, b) => a + b);
+    // 聚合当天全部记录（「今日记账」纯日期记录 + 当天所有 imp_ 导入记录），
+    // 使导入当天 Excel 后首页摘要同步更新。
+    final dayRecords = ref.watch(dayRecordsProvider(date));
+    final totalQty = dayRecords.fold<int>(
+      0,
+      (s, r) => s + r.jobQuantities.values.fold(0, (a, b) => a + b),
+    );
+    final totalAmount =
+        dayRecords.fold<double>(0, (s, r) => s + r.amount(unitPrices));
+    final dayQty = dayRecords
+        .where((r) => r.shift == ShiftType.day)
+        .fold<int>(0, (s, r) => s + r.jobQuantities.values.fold(0, (a, b) => a + b));
+    final nightQty = dayRecords
+        .where((r) => r.shift == ShiftType.night)
+        .fold<int>(0, (s, r) => s + r.jobQuantities.values.fold(0, (a, b) => a + b));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -251,8 +265,7 @@ class _SummaryCards extends ConsumerWidget {
             child: StatCard(
               title: '今日车数',
               value: '$totalQty',
-              subtitle:
-                  '☀白${record.shift == ShiftType.day ? totalQty : 0} · 🌙夜${record.shift == ShiftType.night ? totalQty : 0}',
+              subtitle: '☀白$dayQty · 🌙夜$nightQty',
             ),
           ),
           const SizedBox(width: 12),

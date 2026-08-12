@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../domain/entities/work_record.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
+import '../../providers/selected_date_record_provider.dart';
+import '../../providers/stats_provider.dart';
 import '../../widgets/record_list_card.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
@@ -67,6 +69,12 @@ class HistoryPage extends ConsumerWidget {
                               await ref
                                   .read(recordRepositoryProvider)
                                   .deleteRecords([r.id]);
+                              // 删除后刷新所有记录相关 Provider，否则 UI 不重绘
+                              ref.invalidate(historyRecordsProvider);
+                              ref.invalidate(last7DaysSummaryProvider);
+                              ref.invalidate(monthlyStatsProvider);
+                              ref.invalidate(lastRecordProvider);
+                              ref.invalidate(dayRecordsProvider);
                             },
                           ))
                       .toList(),

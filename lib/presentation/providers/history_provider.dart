@@ -100,5 +100,15 @@ final last7DaysSummaryProvider = Provider<Map<DateTime, List<WorkRecord>>>((ref)
   return map;
 });
 
+/// 某天的全部记录（含「今日记账」纯日期记录 + 当天所有 imp_ 导入记录），
+/// 用于首页「今日摘要」聚合展示——导入当天数据后摘要同步更新。
+final dayRecordsProvider =
+    Provider.family<List<WorkRecord>, DateTime>((ref, date) {
+  final repository = ref.watch(recordRepositoryProvider);
+  final dayStart = DateTime(date.year, date.month, date.day);
+  final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
+  return repository.query(start: dayStart, end: dayEnd);
+});
+
 /// 批量勾选待删除的记录 id 集合。
 final selectedRecordIdsProvider = StateProvider<Set<String>>((ref) => {});

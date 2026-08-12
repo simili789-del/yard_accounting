@@ -257,6 +257,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     _ref.invalidate(selectedDateRecordProvider);
     _ref.invalidate(last7DaysSummaryProvider);
     _ref.invalidate(monthlyStatsProvider);
+    _ref.invalidate(dayRecordsProvider);
 
     // 3) 沉淀固定人员名单 + 刷新联动
     await settings.setFixedWorkers(state.selectedWorkers.toList());
