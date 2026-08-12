@@ -68,7 +68,9 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 ),
                 Text(
                   '${DateFormat('yyyy年M月d日').format(now)} $weekDay',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

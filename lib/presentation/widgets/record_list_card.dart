@@ -22,13 +22,12 @@ class RecordListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final totalQty = record.jobQuantities.values.fold<int>(0, (a, b) => a + b);
-    final shiftColor = record.shift == ShiftType.night
-        ? Colors.indigo.shade100
-        : Colors.orange.shade100;
-    final shiftTextColor = record.shift == ShiftType.night
-        ? Colors.indigo.shade800
-        : Colors.orange.shade800;
+    final isNight = record.shift == ShiftType.night;
+    final shiftColor = isNight ? cs.secondaryContainer : cs.tertiaryContainer;
+    final shiftTextColor =
+        isNight ? cs.onSecondaryContainer : cs.onTertiaryContainer;
 
     final summary = record.jobQuantities.entries
         .where((e) => e.value > 0)
@@ -101,7 +100,7 @@ class RecordListCard extends StatelessWidget {
                     Text(
                       record.remark!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade500,
+                            color: cs.onSurfaceVariant,
                           ),
                     ),
                 ],
@@ -123,7 +122,7 @@ class RecordListCard extends StatelessWidget {
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, size: 20),
                         onPressed: onEdit,
-                        color: Colors.blue,
+                        color: cs.primary,
                         constraints: const BoxConstraints(
                           minWidth: 32,
                           minHeight: 32,
@@ -134,7 +133,7 @@ class RecordListCard extends StatelessWidget {
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 20),
                         onPressed: onDelete,
-                        color: Colors.red,
+                        color: cs.error,
                         constraints: const BoxConstraints(
                           minWidth: 32,
                           minHeight: 32,

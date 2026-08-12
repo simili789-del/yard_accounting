@@ -19,6 +19,7 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -28,7 +29,7 @@ class StatCard extends StatelessWidget {
             Text(
               title,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
+                    color: cs.onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 8),
@@ -37,9 +38,13 @@ class StatCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     value,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: valueColor,
+                          color: valueColor ?? cs.onSurface,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                   ),
                 ),

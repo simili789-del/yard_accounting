@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// 基于 Material 3 的浅色/深色主题配置。
+///
+/// 全站视觉升级（专业商务·精致风）的核心：统一字体节奏、卡片轻质感、
+/// 导航高亮、按钮/分割线/列表等组件规范。仅扩展 [ThemeData]，不改动
+/// 任何业务逻辑，自动兼容 7 套主题色与深色模式。
 class AppTheme {
   AppTheme._();
 
@@ -36,28 +40,61 @@ class AppTheme {
       seedColor: seedColor,
       brightness: brightness,
     );
+    final isLight = brightness == Brightness.light;
+    final baseText =
+        isLight ? ThemeData.light().textTheme : ThemeData.dark().textTheme;
+    // 在 M3 默认字体基础上微调：标题字重上调、大数字等宽对齐（金额/车数更整齐）。
+    final textTheme = baseText.copyWith(
+      displaySmall:
+          baseText.displaySmall?.copyWith(fontWeight: FontWeight.w700),
+      headlineSmall: baseText.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      titleLarge: baseText.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      titleMedium: baseText.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      bodySmall: baseText.bodySmall?.copyWith(fontWeight: FontWeight.w500),
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
-      appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
-      cardTheme: CardTheme(
+      textTheme: textTheme,
+      // 统一的「画布」底色，营造留白与层次。
+      scaffoldBackgroundColor:
+          isLight ? const Color(0xFFF6F7F9) : Colors.grey.shade900,
+      appBarTheme: AppBarTheme(
+        centerTitle: false,
         elevation: 0,
+        scrolledUnderElevation: 1,
+        backgroundColor:
+            isLight ? const Color(0xFFF6F7F9) : Colors.grey.shade900,
+        foregroundColor: colorScheme.onSurface,
+      ),
+      // 卡片：极轻 elevation + 柔阴影 + 1px 淡描边，告别纯平面感。
+      cardTheme: CardThemeData(
+        elevation: 1,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: isLight ? Colors.black12 : Colors.black54,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: brightness == Brightness.light
-                ? Colors.grey.shade200
-                : Colors.grey.shade800,
+            color: isLight ? Colors.grey.shade200 : Colors.grey.shade800,
           ),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       ),
+      // 底部导航：选中项主色浅底高亮（indicator 由主题驱动，页面无需改）。
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: colorScheme.primaryContainer,
+        labelTextStyle:
+            const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        height: 64,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: brightness == Brightness.light
-            ? Colors.grey.shade50
-            : Colors.grey.shade900,
+        fillColor: isLight ? Colors.grey.shade50 : Colors.grey.shade900,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -70,16 +107,13 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
-          backgroundColor: brightness == Brightness.light
-              ? Colors.grey.shade100
-              : Colors.grey.shade800,
+          backgroundColor:
+              isLight ? Colors.grey.shade100 : Colors.grey.shade800,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -91,7 +125,26 @@ class AppTheme {
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle:
+              const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          textStyle:
+              const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -102,10 +155,49 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         side: BorderSide.none,
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+      ),
+      dividerTheme: DividerThemeData(
+        color: isLight ? Colors.grey.shade200 : Colors.grey.shade800,
+        thickness: 1,
+        space: 1,
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        foregroundColor: colorScheme.onPrimary,
+        backgroundColor: colorScheme.primary,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 3,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colorScheme.primary,
+        trackColor: colorScheme.primary.withOpacity(0.15),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
       ),
     );
   }
