@@ -13,6 +13,7 @@ import '../../providers/app_settings_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
+import '../../providers/stats_provider.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
 
