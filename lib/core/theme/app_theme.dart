@@ -73,7 +73,7 @@ class AppTheme {
         foregroundColor: colorScheme.onSurface,
       ),
       // 卡片：极轻 elevation + 柔阴影 + 1px 淡描边，告别纯平面感。
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         elevation: 1,
         surfaceTintColor: Colors.transparent,
         shadowColor: isLight ? Colors.black12 : Colors.black54,
@@ -89,7 +89,7 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         indicatorColor: colorScheme.primaryContainer,
         labelTextStyle:
-            const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         height: 64,
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -184,7 +184,7 @@ class AppTheme {
         ),
         contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
       ),
-      dialogTheme: DialogThemeData(
+      dialogTheme: DialogTheme(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -192,7 +192,8 @@ class AppTheme {
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colorScheme.primary,
-        trackColor: colorScheme.primary.withOpacity(0.15),
+        linearTrackColor: colorScheme.primary.withOpacity(0.15),
+        circularTrackColor: colorScheme.primary.withOpacity(0.15),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         shape: RoundedRectangleBorder(
