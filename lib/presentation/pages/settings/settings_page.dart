@@ -164,11 +164,9 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                           flex: 2,
                           child: TextFormField(
                             initialValue: e.key,
-                            decoration: InputDecoration(
+                            decoration: const InputDecoration(
                               labelText: '作业类型',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              filled: true,
                             ),
                             onFieldSubmitted: (v) {
                               final newName = v.trim();
@@ -189,11 +187,9 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                               decimal: true,
                             ),
                             textAlign: TextAlign.right,
-                            decoration: InputDecoration(
+                            decoration: const InputDecoration(
                               labelText: '单价',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              filled: true,
                             ),
                             onFieldSubmitted: (v) {
                               final price = double.tryParse(v) ?? e.value;
@@ -249,8 +245,11 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('新增作业类型',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('新增作业类型',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                )),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -258,11 +257,9 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                   flex: 2,
                   child: TextFormField(
                     controller: _nameCtrl,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: '类型名称',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      filled: true,
                     ),
                   ),
                 ),
@@ -270,11 +267,9 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                 Expanded(
                   child: TextFormField(
                     controller: _priceCtrl,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: '单价',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      filled: true,
                     ),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -392,7 +387,9 @@ class _AppearanceSection extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('主题颜色'),
+                Text('主题颜色',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface)),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,
@@ -432,7 +429,12 @@ class _AppearanceSection extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Expanded(child: Text('隐藏金额')),
+                    Expanded(
+                        child: Text('隐藏金额',
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface))),
                     Switch(
                       value: settings.hideAmount,
                       onChanged: (v) => ref
@@ -444,7 +446,12 @@ class _AppearanceSection extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Expanded(child: Text('深色模式')),
+                    Expanded(
+                        child: Text('深色模式',
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface))),
                     Switch(
                       value: themeMode == 'dark',
                       onChanged: (v) {
@@ -774,7 +781,12 @@ class _NumberField extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(label)),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                )),
+          ),
           SizedBox(
             width: 120,
             child: TextFormField(
@@ -782,6 +794,9 @@ class _NumberField extends StatelessWidget {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.right,
+              decoration: const InputDecoration(
+                filled: true,
+              ),
               onChanged: (v) => onChanged(double.tryParse(v) ?? value),
             ),
           ),
