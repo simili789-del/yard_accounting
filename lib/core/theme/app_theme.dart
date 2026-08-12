@@ -66,7 +66,7 @@ class AppTheme {
         titleMedium: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
         headlineSmall: const TextStyle(
           fontWeight: FontWeight.w700,
-          fontFeatures: const [FontFeature.tabularFigures()], // 数字等宽对齐
+          fontFeatures: [FontFeature.tabularFigures()], // 数字等宽对齐
         ),
         bodySmall: TextStyle(
           color: colorScheme.onSurfaceVariant,
