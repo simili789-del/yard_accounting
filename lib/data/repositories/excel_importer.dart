@@ -137,6 +137,10 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     if (h.contains('米') || h.contains('吨') || h.contains('方')) {
       continue;
     }
+    // 准驾车型 / 有效期 / 驾照 等花名册字段不是作业类型，避免误当归数
+    if (h.contains('准驾') || h.contains('车型') || h.contains('有效期') || h.contains('驾照')) {
+      continue;
+    }
     jobCols[c] = _cleanColumn(h);
     rawJobCols[c] = h;
   }
@@ -181,8 +185,10 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   String? lastBoat; // 挖掘机表船名常合并单元格留空，向上延续
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
-    final name = _text(rows[r][nameCol]) ?? '';
-    final rowBoat = boatCol != null ? _text(rows[r][boatCol]) : null;
+    // 归一化姓名/船名内部空白（如「玛蒂尔 达」→「玛蒂尔达」）
+    final name = (_text(rows[r][nameCol]) ?? '').replaceAll(RegExp(r'\s+'), '');
+    final rowBoat =
+        boatCol != null ? (_text(rows[r][boatCol]) ?? '').replaceAll(RegExp(r'\s+'), '') : null;
     // 跳过重复表头行（分页处常再写一行『姓名/车号』）
     if (name == '姓名') continue;
 
@@ -239,6 +245,10 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       if (totals.isNotEmpty) sheetTotals = totals;
       continue;
     }
+
+    // 姓名列为纯数字（如「1050.0」）不是真实司机姓名（多为误填的车号），
+    // 跳过以免把车数挂到一个假人员上污染人员库。
+    if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(name)) continue;
 
     if (isExcavator) {
       // 挖掘机模式：船名=作业类型（向上延续填充），车数=各数值列之和
@@ -387,6 +397,7 @@ bool _isNonPerfSheet(String sheetName, List<dynamic> headerCells) {
     '56道',
     '班表',
     '作业量',
+    '出勤', // 出勤/准驾车型/有效期 等花名册不是司机绩效表
   ];
   for (final k in excluded) {
     if (sheetName.contains(k)) return true;
@@ -417,7 +428,11 @@ bool _isNonPerfSheet(String sheetName, List<dynamic> headerCells) {
         h.contains('确认') ||
         h.contains('米') ||
         h.contains('吨') ||
-        h.contains('方')) {
+        h.contains('方') ||
+        h.contains('准驾') ||
+        h.contains('车型') ||
+        h.contains('有效期') ||
+        h.contains('驾照')) {
       continue;
     }
     total++;
@@ -449,6 +464,9 @@ int? _toInt(dynamic cell) {
   if (v is String) {
     final s = v.trim();
     if (s.isEmpty) return null;
+    // 仅接受纯数字表达式（数字与 + - . / 及空白），拒绝「C6场1000吨」之类
+    // 带中文/字母的注释文本，否则会把其中的数字误算成车数。
+    if (!RegExp(r'^[\d\s+\-.,/]+$').hasMatch(s)) return null;
     // 支持『56+49』『5+101』之类的车数表达式：提取所有数字求和取整。
     // 挖掘机绩效表常在「加高（车）」列手写多段合计。
     final nums = RegExp(r'-?\d+(?:\.\d+)?').allMatches(s);
@@ -486,6 +504,16 @@ DateTime? _parseDateCell(dynamic cell) {
       int.parse(slash.group(3)!),
     );
   }
+  // 2026.8.3 / 2026.8. 3（点分隔，部分表用「年月日」之外的点格式）
+  final dot =
+      RegExp(r'(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})').firstMatch(v);
+  if (dot != null) {
+    return DateTime(
+      int.parse(dot.group(1)!),
+      int.parse(dot.group(2)!),
+      int.parse(dot.group(3)!),
+    );
+  }
   // 2026年8月12日 / 2026年08月10号（口语「号」同「日」）
   final cn =
       RegExp(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]').firstMatch(v);
@@ -509,12 +537,15 @@ DateTime? _parseDateCell(dynamic cell) {
   return DateTime.tryParse(v.replaceAll('/', '-'));
 }
 
-/// 清洗列名：剥离结尾的「(可选逗号) 数字 元」，提取单价。
-/// 例：「外倒装车1.8元」→ 外倒装车 + 1.8；「内倒装车，端货1.8元」→ 内倒装车/端货 + 1.8；
+/// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
+/// 兼容多种写法：
+/// 「外倒装车1.8元」→ 外倒装车 + 1.8；
+/// 「倒货/1.8」→ 倒货 + 1.8（无「元」也识别）；
+/// 「内倒装车，端货1.8元」→ 内倒装车/端货 + 1.8；
 /// 「货场归剁」→ 货场归剁 + null。
 CleanedColumn _cleanColumn(String raw) {
   final m =
-      RegExp(r'^(.*?)(?:[，,]\s*)?(\d+(?:\.\d+)?)\s*元\s*$').firstMatch(raw);
+      RegExp(r'^(.*?)(?:[，,\s/]\s*)?(\d+(?:\.\d+)?)\s*元?\s*$').firstMatch(raw);
   if (m != null) {
     return CleanedColumn(
       m.group(1)!.trim().replaceAll('，', '/'),
