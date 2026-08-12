@@ -80,43 +80,48 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
           setState(() => _sheetName = v);
           _reparse();
         }),
-        _HeaderRowTile(
-          headerRow: result.headerRow,
-          headerOverride: _headerRow,
-          onChanged: (v) {
-            setState(() => _headerRow = v);
-            _reparse();
-          },
-        ),
-        const SizedBox(height: 8),
-        _MappingPreview(result, templateMatched: state.templateMatched),
-        const SizedBox(height: 8),
-        if (result.sheetTotals != null)
-          _ReconcilePanel(
-            result: result,
-            computed: ref.read(importProvider.notifier).computedTotals,
-            mismatches: ref.read(importProvider.notifier).mismatches,
+        if (!result.importable) ...[
+          const SizedBox(height: 8),
+          _NonImportablePanel(result),
+        ] else ...[
+          _HeaderRowTile(
+            headerRow: result.headerRow,
+            headerOverride: _headerRow,
+            onChanged: (v) {
+              setState(() => _headerRow = v);
+              _reparse();
+            },
           ),
-        const SizedBox(height: 12),
-        _DateShiftTile(
-          date: state.date,
-          shift: state.shift,
-          onDate: (d) => ref.read(importProvider.notifier).setDate(d),
-          onShift: (s) => ref.read(importProvider.notifier).setShift(s),
-        ),
-        const SizedBox(height: 12),
-        if (state.focusedWorker != null || state.fixedWorkers.isNotEmpty)
-          SwitchListTile(
-            title: state.focusedWorker != null
-                ? Text('仅导入「${state.focusedWorker}」')
-                : const Text('仅导入固定人员名单内的人'),
-            subtitle: const Text('关闭后可勾选表格中的其他人员'),
-            value: state.enforceFixed,
-            onChanged: (v) =>
-                ref.read(importProvider.notifier).setEnforceFixed(v),
+          const SizedBox(height: 8),
+          _MappingPreview(result, templateMatched: state.templateMatched),
+          const SizedBox(height: 8),
+          if (result.sheetTotals != null)
+            _ReconcilePanel(
+              result: result,
+              computed: ref.read(importProvider.notifier).computedTotals,
+              mismatches: ref.read(importProvider.notifier).mismatches,
+            ),
+          const SizedBox(height: 12),
+          _DateShiftTile(
+            date: state.date,
+            shift: state.shift,
+            onDate: (d) => ref.read(importProvider.notifier).setDate(d),
+            onShift: (s) => ref.read(importProvider.notifier).setShift(s),
           ),
-        _WorkerList(state),
-        const SizedBox(height: 80),
+          const SizedBox(height: 12),
+          if (state.focusedWorker != null || state.fixedWorkers.isNotEmpty)
+            SwitchListTile(
+              title: state.focusedWorker != null
+                  ? Text('仅导入「${state.focusedWorker}」')
+                  : const Text('仅导入固定人员名单内的人'),
+              subtitle: const Text('关闭后可勾选表格中的其他人员'),
+              value: state.enforceFixed,
+              onChanged: (v) =>
+                  ref.read(importProvider.notifier).setEnforceFixed(v),
+            ),
+          _WorkerList(state),
+          const SizedBox(height: 80),
+        ],
       ],
     );
   }
@@ -136,7 +141,21 @@ class _SheetSelector extends StatelessWidget {
       trailing: DropdownButton<String>(
         value: value ?? result.sheetName,
         items: result.sheetNames
-            .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+            .map((s) {
+              final ok = result.sheetImportable?[s] ?? true;
+              return DropdownMenuItem(
+                value: s,
+                child: Text(
+                  ok ? s : '$s（非绩效表）',
+                  style: ok
+                      ? null
+                      : Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey),
+                ),
+              );
+            })
             .toList(),
         onChanged: onChanged,
       ),
@@ -499,6 +518,63 @@ class _SuccessPanel extends StatelessWidget {
             child: const Text('完成'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NonImportablePanel extends StatelessWidget {
+  final ExcelParseResult result;
+  const _NonImportablePanel(this.result);
+
+  @override
+  Widget build(BuildContext context) {
+    final importableSheets = (result.sheetImportable ?? {})
+        .entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('该工作表无可导入的绩效数据',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              result.hint ?? '请选择含「姓名 + 车数」的司机绩效表',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            if (importableSheets.isNotEmpty) ...[
+              const Text('可切换到以下工作表导入：',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              ...importableSheets.map(
+                (s) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle,
+                          color: Colors.green, size: 18),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(s)),
+                    ],
+                  ),
+                ),
+              ),
+            ] else
+              const Text('（文件中未检测到司机绩效表）'),
+          ],
+        ),
       ),
     );
   }

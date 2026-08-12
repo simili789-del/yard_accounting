@@ -5,10 +5,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
 
-/// 默认优先解析的 sheet（用户已确认只导「铲车绩效表」）。
-const String _defaultSheet = '铲车绩效表';
-
-/// 解析 xlsx 的一次性结果，供导入向导直接使用。
+/// 解析 xlsx/xls 的一次性结果，供导入向导直接使用。
 class ExcelParseResult {
   final List<String> sheetNames;
   final String sheetName;
@@ -23,6 +20,15 @@ class ExcelParseResult {
 
   /// 船名列（可选；挖掘机绩效表的船名常在表头为空的 A 列）。
   final int? boatCol;
+
+  /// 该表是否为可导入的司机绩效表。false 时 [hint] 说明原因，UI 应提示换表。
+  final bool importable;
+
+  /// 不可导入原因（importable 为 false 时非空）。
+  final String? hint;
+
+  /// 文件内每个工作表是否可导入（供向导下拉标注）。
+  final Map<String, bool>? sheetImportable;
 
   /// 清洗前的原始作业类型列名（用于「模板记忆」指纹匹配）。
   final List<String> rawJobColumns;
@@ -45,6 +51,9 @@ class ExcelParseResult {
     required this.shift,
     this.rawJobColumns = const [],
     this.sheetTotals,
+    this.importable = true,
+    this.hint,
+    this.sheetImportable,
   });
 }
 
@@ -57,19 +66,13 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final decoder = SpreadsheetDecoder.decodeBytes(bytes);
   final sheetNames = decoder.tables.keys.toList();
 
-  var target = sheetName ?? _defaultSheet;
-  if (!decoder.tables.containsKey(target)) {
-    // 默认表不存在时，回退到第一个含「姓名」表头的 sheet
-    // （兼容只含挖掘机表的文件，避免硬报错）
-    target = sheetNames.firstWhere(
-      (s) {
-        final t = decoder.tables[s];
-        if (t == null) return false;
-        return t.rows
-            .any((r) => r.any((c) => _text(c)?.contains('姓名') ?? false));
-      },
-      orElse: () => target,
-    );
+  // 预扫描每个 sheet 是否可导入（供向导下拉标注，并用于默认 sheet 选择）
+  final sheetImportableMap = _scanImportable(decoder);
+  // 用户未指定 sheet、或指定的 sheet 不存在时，自动选中首个「看起来像司机
+  // 绩效表」的 sheet（含 绩效/铲车/装载机/挖掘机 关键词优先，且非考勤类）。
+  var target = sheetName;
+  if (target == null || !decoder.tables.containsKey(target)) {
+    target = _pickDefaultSheet(decoder) ?? sheetNames.first;
   }
   final table = decoder.tables[target];
   if (table == null) {
@@ -138,7 +141,19 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     rawJobCols[c] = h;
   }
   if (nameCol == null) {
-    throw Exception('表头中未找到「姓名」列，请检查表头行是否正确');
+    // 找不到精确的「姓名」列：该表大概率不是司机绩效表，温柔返回而非抛异常，
+    // 让向导提示用户切换到含「姓名」列的绩效表。
+    return ExcelParseResult(
+      importable: false,
+      hint: '未找到「姓名」列，该表不是司机绩效表（司机绩效表需含「姓名」列）',
+      sheetNames: sheetNames,
+      sheetName: target,
+      headerRow: headerIdx < 0 ? 0 : headerIdx,
+      jobColumns: const [],
+      rows: const [],
+      shift: ShiftType.day,
+      sheetImportable: sheetImportableMap,
+    );
   }
   // 挖掘机模式：存在「船名」列时，船名即作业类型（逐行向上延续填充），
   // 其余数值列（jobCols）作为该车名的车数。
@@ -168,6 +183,8 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   for (int r = headerIdx + 1; r < rows.length; r++) {
     final name = _text(rows[r][nameCol]) ?? '';
     final rowBoat = boatCol != null ? _text(rows[r][boatCol]) : null;
+    // 跳过重复表头行（分页处常再写一行『姓名/车号』）
+    if (name == '姓名') continue;
 
     // 日期 / 班次列优先于表头 meta 行（显式列存在时逐行覆盖）
     if (dateCol != null) {
@@ -264,6 +281,32 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       ? boatJobTypes.map((n) => CleanedColumn(n, null)).toList()
       : jobCols.values.toList();
 
+  // 非绩效表（考勤/工资/汇总/火车明细等）或完全无车数 → 标记为不可导入，
+  // 让向导提示用户切换工作表，避免把考勤表当成绩效表污染工资数据。
+  if (_isNonPerfSheet(target, headerCells) || result.isEmpty) {
+    final reason = _isNonPerfSheet(target, headerCells)
+        ? '该表疑似考勤/工资/汇总/火车明细表，不是司机绩效表。请选择含「姓名 + 车数」的绩效表（如铲车/装载机/挖掘机绩效）'
+        : '未在该表识别到任何车数数据';
+    return ExcelParseResult(
+      importable: false,
+      hint: reason,
+      sheetNames: sheetNames,
+      sheetName: target,
+      headerRow: headerIdx,
+      nameCol: nameCol,
+      vehCol: vehCol,
+      remarkCol: remarkCol,
+      boatCol: boatCol,
+      jobColumns: effectiveJobCols,
+      rows: result,
+      date: date,
+      shift: shift,
+      rawJobColumns: rawJobCols.values.toList(),
+      sheetTotals: sheetTotals,
+      sheetImportable: sheetImportableMap,
+    );
+  }
+
   return ExcelParseResult(
     sheetNames: sheetNames,
     sheetName: target,
@@ -278,7 +321,114 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     shift: shift,
     rawJobColumns: rawJobCols.values.toList(),
     sheetTotals: sheetTotals,
+    sheetImportable: sheetImportableMap,
   );
+}
+
+/// 扫描文件内每个工作表是否可导入（轻量结构检查，不解析车数）。
+Map<String, bool> _scanImportable(SpreadsheetDecoder decoder) {
+  final map = <String, bool>{};
+  for (final name in decoder.tables.keys) {
+    final t = decoder.tables[name];
+    map[name] = t == null ? false : _sheetImportable(t, name);
+  }
+  return map;
+}
+
+/// 单个工作表是否看起来像司机绩效表：含「姓名」表头、非考勤类、且至少有一数值车数。
+bool _sheetImportable(SpreadsheetTable table, String name) {
+  int? headerIdx;
+  for (int r = 0; r < table.rows.length; r++) {
+    if (table.rows[r].any((c) => (_text(c) ?? '').contains('姓名'))) {
+      headerIdx = r;
+      break;
+    }
+  }
+  if (headerIdx == null) return false;
+  final header = table.rows[headerIdx];
+  if (_isNonPerfSheet(name, header)) return false;
+  for (int r = headerIdx + 1; r < table.rows.length; r++) {
+    for (final c in table.rows[r]) {
+      final v = _raw(c);
+      if (v is num && v != 0) return true;
+    }
+  }
+  return false;
+}
+
+/// 自动选择默认工作表：优先含 绩效/铲车/装载机/挖掘机 关键词且可导入的，
+/// 其次任意可导入的，都没有则返回 null。
+String? _pickDefaultSheet(SpreadsheetDecoder decoder) {
+  const preferred = ['绩效', '铲车', '装载机', '挖掘机'];
+  for (final k in preferred) {
+    for (final name in decoder.tables.keys) {
+      if (name.contains(k) && _sheetImportable(decoder.tables[name]!, name)) {
+        return name;
+      }
+    }
+  }
+  for (final name in decoder.tables.keys) {
+    if (_sheetImportable(decoder.tables[name]!, name)) return name;
+  }
+  return null;
+}
+
+/// 判断表头/表名是否像「考勤/工资/汇总/火车明细」等非绩效表。
+/// 依据：表名含排除关键词、列数过多（>25）、或候选作业列中纯数字/序号列过半
+/// （考勤表的 1~31 日列）。作业类型列通常为中文业务词（装车/归垛/倒货/加高）。
+bool _isNonPerfSheet(String sheetName, List<dynamic> headerCells) {
+  const excluded = [
+    '考勤',
+    '工资',
+    '汇总',
+    '报表',
+    '火车',
+    '明细',
+    '56道',
+    '班表',
+    '作业量',
+  ];
+  for (final k in excluded) {
+    if (sheetName.contains(k)) return true;
+  }
+  if (headerCells.length > 25) return true;
+  int total = 0;
+  int numeric = 0;
+  for (int c = 0; c < headerCells.length; c++) {
+    final h = _text(headerCells[c]) ?? '';
+    if (h.isEmpty) continue;
+    if (h == '姓名' ||
+        h == '车号' ||
+        h.contains('车牌') ||
+        h.contains('车辆') ||
+        h.contains('备注') ||
+        h.contains('说明') ||
+        h.contains('船名') ||
+        h.contains('船号') ||
+        h.contains('日期') ||
+        h.contains('时间') ||
+        h.contains('班次') ||
+        h.contains('白班') ||
+        h.contains('夜班') ||
+        h.contains('班别') ||
+        h.contains('签字') ||
+        h.contains('签名') ||
+        h.contains('复核') ||
+        h.contains('确认') ||
+        h.contains('米') ||
+        h.contains('吨') ||
+        h.contains('方')) {
+      continue;
+    }
+    total++;
+    if (h == '序号' ||
+        RegExp(r'^\d+$').hasMatch(h) ||
+        RegExp(r'^\d+\.\d+$').hasMatch(h)) {
+      numeric++;
+    }
+  }
+  if (total > 0 && numeric * 2 >= total) return true;
+  return false;
 }
 
 /// 取出单元格底层值（文本/数字/公式缓存值）。
@@ -296,13 +446,27 @@ int? _toInt(dynamic cell) {
   if (v == null) return null;
   if (v is int) return v;
   if (v is double) return v.round();
-  if (v is String) return int.tryParse(v.trim());
+  if (v is String) {
+    final s = v.trim();
+    if (s.isEmpty) return null;
+    // 支持『56+49』『5+101』之类的车数表达式：提取所有数字求和取整。
+    // 挖掘机绩效表常在「加高（车）」列手写多段合计。
+    final nums = RegExp(r'-?\d+(?:\.\d+)?').allMatches(s);
+    if (nums.isEmpty) return null;
+    var sum = 0;
+    for (final m in nums) {
+      sum += (double.tryParse(m.group(0)!) ?? 0).round();
+    }
+    return sum;
+  }
   return null;
 }
 
 /// 解析日期单元格：兼容 Excel 序列日期（如 46240）、2026/8/12、
 /// 2026-08-12、2026年8月12日、2026年-8/6 等写法。
 DateTime? _parseDateCell(dynamic cell) {
+  // spreadsheet_decoder 可能已把日期单元格转成 DateTime
+  if (cell is DateTime) return cell;
   // Excel 序列日期（数字）：基准 1899-12-30
   if (cell is int || cell is double) {
     final n = (cell as num).toDouble();
@@ -322,9 +486,9 @@ DateTime? _parseDateCell(dynamic cell) {
       int.parse(slash.group(3)!),
     );
   }
-  // 2026年8月12日
+  // 2026年8月12日 / 2026年08月10号（口语「号」同「日」）
   final cn =
-      RegExp(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日').firstMatch(v);
+      RegExp(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]').firstMatch(v);
   if (cn != null) {
     return DateTime(
       int.parse(cn.group(1)!),
