@@ -31,8 +31,7 @@ dependencies:
   # 真实导出：把生成的 CSV/JSON 文档交给系统分享/保存
   path_provider: ^2.1.2
   share_plus: ^7.2.0
-  # share_plus 7.x 的 XFile 来源（7.x 不再 re-export，需单独声明）
-  cross_file: ^2.1.2
+  # XFile 由 share_plus 7.x 的传递依赖 cross_file 提供，无需单独声明
 
   # 工具库
   intl: ^0.19.0
