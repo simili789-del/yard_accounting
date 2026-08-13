@@ -42,8 +42,8 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
       // iOS 18 风格：大圆角、无投影、贴底容器色卡片。
-      // 注意：CI 实际 Flutter < 3.10，使用 CardTheme（CardThemeData 在该版本不存在）。
-      cardTheme: CardTheme(
+      // CardTheme 在 Flutter 3.47+ 已更名为 CardThemeData。
+      cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
