@@ -32,12 +32,13 @@ class HistoryPage extends ConsumerWidget {
                 await ref
                     .read(recordRepositoryProvider)
                     .deleteRecords(selected.toList());
-                // 批量删除后同样刷新全部记录相关 Provider，否则列表不重绘
+                // 批量删除后刷新全部记录相关 Provider（含首页今日记账），否则列表/首页残留旧数据
                 ref.invalidate(historyRecordsProvider);
                 ref.invalidate(last7DaysSummaryProvider);
                 ref.invalidate(monthlyStatsProvider);
                 ref.invalidate(lastRecordProvider);
                 ref.invalidate(dayRecordsProvider);
+                ref.invalidate(selectedDateRecordProvider);
                 ref.read(selectedRecordIdsProvider.notifier).state = {};
               },
             ),
@@ -75,12 +76,13 @@ class HistoryPage extends ConsumerWidget {
                               await ref
                                   .read(recordRepositoryProvider)
                                   .deleteRecords([r.id]);
-                              // 删除后刷新所有记录相关 Provider，否则 UI 不重绘
+                              // 删除后刷新所有记录相关 Provider（含首页今日记账），否则 UI 残留旧数据
                               ref.invalidate(historyRecordsProvider);
                               ref.invalidate(last7DaysSummaryProvider);
                               ref.invalidate(monthlyStatsProvider);
                               ref.invalidate(lastRecordProvider);
                               ref.invalidate(dayRecordsProvider);
+                              ref.invalidate(selectedDateRecordProvider);
                             },
                           ))
                       .toList(),

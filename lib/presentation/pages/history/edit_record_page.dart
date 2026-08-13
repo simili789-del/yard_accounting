@@ -165,6 +165,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     ref.invalidate(monthlyStatsProvider);
     ref.invalidate(lastRecordProvider);
     ref.invalidate(dayRecordsProvider);
+    ref.invalidate(selectedDateRecordProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已保存修改')),
     );

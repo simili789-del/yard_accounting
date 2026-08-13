@@ -76,7 +76,8 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
   final workerFilter = ref.watch(statsWorkerFilterProvider);
 
   final start = DateTime(month.year, month.month, 1);
-  final end = DateTime(month.year, month.month + 1, 0);
+  // 终点取当月最后一天 23:59:59.999，避免带时刻记录（如 JSON 恢复）被月末边界漏掉
+  final end = DateTime(month.year, month.month + 1, 0, 23, 59, 59, 999, 999);
   var records = repository.query(start: start, end: end);
 
   if (workerFilter.isNotEmpty) {

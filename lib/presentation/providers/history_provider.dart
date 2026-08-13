@@ -45,19 +45,30 @@ class HistoryFilter {
 
   (DateTime, DateTime) resolveDates() {
     final now = DateTime.now();
+    // 全部按「完整自然日」归一化：起点取当日 00:00:00，终点取当日 23:59:59.999，
+    // 避免带时刻的 now 把当天 0 点 / 月初 / 月末的记录误判为越界而漏统计。
+    final dayStart = DateTime(now.year, now.month, now.day);
+    final dayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999, 999);
     switch (range) {
       case QuickRange.today:
-        return (now, now);
+        return (dayStart, dayEnd);
       case QuickRange.last7Days:
-        return (now.subtract(const Duration(days: 6)), now);
+        return (dayStart.subtract(const Duration(days: 6)), dayEnd);
       case QuickRange.thisMonth:
-        return (DateTime(now.year, now.month, 1), now);
+        return (DateTime(now.year, now.month, 1), dayEnd);
       case QuickRange.lastMonth:
-        final lastMonth = DateTime(now.year, now.month - 1, 1);
-        final lastDay = DateTime(now.year, now.month, 0);
-        return (lastMonth, lastDay);
+        final lastMonthStart = DateTime(now.year, now.month - 1, 1);
+        final lastMonthEnd =
+            DateTime(now.year, now.month, 0, 23, 59, 59, 999, 999);
+        return (lastMonthStart, lastMonthEnd);
       case QuickRange.custom:
-        return (customStart ?? now, customEnd ?? now);
+        final start = customStart != null
+            ? DateTime(customStart.year, customStart.month, customStart.day)
+            : dayStart;
+        final end = customEnd != null
+            ? DateTime(customEnd.year, customEnd.month, customEnd.day, 23, 59, 59, 999, 999)
+            : dayEnd;
+        return (start, end);
     }
   }
 }
@@ -68,6 +79,8 @@ final historyFilterProvider =
 final historyRecordsProvider = Provider<List<WorkRecord>>((ref) {
   final repository = ref.watch(recordRepositoryProvider);
   final filter = ref.watch(historyFilterProvider);
+  // 接入真实单价表，金额排序才能正确生效（原 amount({}) 空表会使排序失效）
+  final unitPrices = ref.watch(unitPricesProvider);
   final (start, end) = filter.resolveDates();
   var records = repository.query(
     start: start,
@@ -81,7 +94,7 @@ final historyRecordsProvider = Provider<List<WorkRecord>>((ref) {
     case HistorySort.dateAsc:
       records.sort((a, b) => a.date.compareTo(b.date));
     case HistorySort.amountDesc:
-      records.sort((a, b) => b.amount({}).compareTo(a.amount({})));
+      records.sort((a, b) => b.amount(unitPrices).compareTo(a.amount(unitPrices)));
   }
   return records;
 });
@@ -90,8 +103,11 @@ final historyRecordsProvider = Provider<List<WorkRecord>>((ref) {
 final last7DaysSummaryProvider = Provider<Map<DateTime, List<WorkRecord>>>((ref) {
   final repository = ref.watch(recordRepositoryProvider);
   final now = DateTime.now();
-  final start = now.subtract(const Duration(days: 6));
-  final records = repository.query(start: start, end: now);
+  // 起点取 6 天前的 00:00:00，终点取今日 23:59:59.999，覆盖完整 7 个自然日
+  final start = DateTime(now.year, now.month, now.day)
+      .subtract(const Duration(days: 6));
+  final end = DateTime(now.year, now.month, now.day, 23, 59, 59, 999, 999);
+  final records = repository.query(start: start, end: end);
   final map = <DateTime, List<WorkRecord>>{};
   for (final r in records) {
     final key = DateTime(r.date.year, r.date.month, r.date.day);

@@ -652,6 +652,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     ref.invalidate(last7DaysSummaryProvider);
                     ref.invalidate(monthlyStatsProvider);
                     ref.invalidate(dayRecordsProvider);
+                    ref.invalidate(selectedDateRecordProvider);
                     if (mounted) _snack('已恢复 ${records.length} 条记录');
                   }),
                 ),
@@ -670,6 +671,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     ref.invalidate(last7DaysSummaryProvider);
                     ref.invalidate(monthlyStatsProvider);
                     ref.invalidate(dayRecordsProvider);
+                    ref.invalidate(selectedDateRecordProvider);
                     if (mounted) _snack('已写入示例数据');
                   }),
                 ),
