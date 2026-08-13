@@ -10,6 +10,7 @@ class DefaultJobTypes {
     '货场倒货',
     '内倒装车',
     '内倒归垛',
+    '挖掘机加高',
   ];
 
   static const Map<String, double> defaultPrices = {
@@ -18,6 +19,7 @@ class DefaultJobTypes {
     '货场倒货': 1.8,
     '内倒装车': 1.8,
     '内倒归垛': 1.2,
+    '挖掘机加高': 1.0,
   };
 
   /// 作业类型展示色，用于卡片、图表、列表圆点。
@@ -28,6 +30,7 @@ class DefaultJobTypes {
     '内倒装车': Colors.red,
     '内倒归垛': Colors.green,
     '火车装车': Colors.brown,
+    '挖掘机加高': Colors.teal,
   };
 
   static Color colorOf(String jobType) =>

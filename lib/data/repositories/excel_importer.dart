@@ -210,7 +210,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
 
   // 4) 逐行提取人员车数；空姓名行是「合计行/说明行/空行」，需区分
   final result = <ImportedRow>[];
-  final boatJobTypes = <String>{};
   String? lastBoat; // 挖掘机表船名常合并单元格留空，向上延续
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
@@ -285,23 +284,32 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(name)) continue;
 
     if (isExcavator) {
-      // 挖掘机模式：船名=作业类型（向上延续填充），车数=各数值列之和
+      // 挖掘机模式：列名含「加高」→ 作业类型 = 挖掘机加高；
+      // 列名含「封跺/封垛」+「米」→ 已在列识别时按米数列过滤，不会进入 jobCols。
+      // 船名记入备注（方便追溯挖了哪条船），车数取各作业类型列之和。
       if (rowBoat != null && rowBoat.isNotEmpty) lastBoat = rowBoat;
       final bt = (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : lastBoat;
-      if (bt == null) continue;
-      var cars = 0;
-      for (final c in jobCols.keys) {
-        cars += _toInt(rows[r][c]) ?? 0;
+      final quantities = <String, int>{};
+      for (final e in jobCols.entries) {
+        final q = _toInt(rows[r][e.key]) ?? 0;
+        if (q > 0) {
+          quantities[e.value.name] = (quantities[e.value.name] ?? 0) + q;
+        }
       }
-      if (cars <= 0) continue;
-      boatJobTypes.add(bt);
+      if (quantities.isEmpty) continue;
+      // 船名合并进备注（如「船名：玛蒂尔达」），与原有备注用「·」连接。
+      String? remark = remarkCol != null ? _text(rows[r][remarkCol]) : null;
+      if (bt != null && bt.isNotEmpty) {
+        final boatNote = '船名：$bt';
+        remark = (remark == null || remark.isEmpty) ? boatNote : '$remark·$boatNote';
+      }
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
-        remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        remark: remark,
         overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
         boatName: null,
-        quantities: {bt: cars},
+        quantities: quantities,
       ));
     } else {
       // 铲车模式：各作业类型列的车数（同名标准类型跨列累加，
@@ -323,10 +331,9 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
   }
 
-  // 挖掘机表：船名作为作业类型；铲车表：各作业类型列名作为作业类型
-  final effectiveJobCols = isExcavator
-      ? boatJobTypes.map((n) => CleanedColumn(n, null)).toList()
-      : jobCols.values.toList();
+  // 作业类型列：挖掘机表和铲车表都用 jobCols 的归一结果
+  // （挖掘机表的「加高（车）」→ 归一为「挖掘机加高」）
+  final effectiveJobCols = jobCols.values.toList();
 
   // 非绩效表（考勤/工资/汇总/火车明细等）或完全无车数 → 标记为不可导入，
   // 让向导提示用户切换工作表，避免把考勤表当成绩效表污染工资数据。
@@ -585,6 +592,8 @@ String _canonicalJobType(String name, {double? price}) {
     case '内倒装车':
       return '内倒装车';
   }
+  // 挖掘机加高：含「加高」的列名（如「加高（车）」）→ 挖掘机加高
+  if (core.contains('加高')) return '挖掘机加高';
   // 模糊兜底：core 含某些关键字时也归一
   if (core.contains('归垛') || core.contains('归剁')) {
     if (core.contains('内倒')) return '内倒归垛';
