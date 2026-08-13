@@ -62,11 +62,14 @@ class HistoryFilter {
             DateTime(now.year, now.month, 0, 23, 59, 59, 999, 999);
         return (lastMonthStart, lastMonthEnd);
       case QuickRange.custom:
-        final start = customStart != null
-            ? DateTime(customStart.year, customStart.month, customStart.day)
+        // 用局部变量承接可空字段，确保 Dart 字段提升生效（直接访问 final 字段在三元表达式内不提升）
+        final cs = customStart;
+        final ce = customEnd;
+        final start = cs != null
+            ? DateTime(cs.year, cs.month, cs.day)
             : dayStart;
-        final end = customEnd != null
-            ? DateTime(customEnd.year, customEnd.month, customEnd.day, 23, 59, 59, 999, 999)
+        final end = ce != null
+            ? DateTime(ce.year, ce.month, ce.day, 23, 59, 59, 999, 999)
             : dayEnd;
         return (start, end);
     }
