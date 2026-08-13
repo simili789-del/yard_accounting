@@ -32,22 +32,27 @@ void main() {
     expect(dongAll, containsPair('货场倒货', 16));
     expect(dongAll, containsPair('火车装车', 16));
 
-    // 陈登国：上半无车数（不产生记录），仅下半 {火车装车:1, 货场归剁:50}
-    // （神华归垛→货场归剁）
+    // 陈登国：上半无车数（不产生记录），仅下半 {火车装车:1, 神华归垛:50}
+    // （神华归垛现为独立作业类型，不再并入货场归剁）
     final chen = byName['陈登国']!;
     expect(chen.length, 1, reason: '陈登国仅下半表有车数');
     expect(chen.single.quantities, containsPair('火车装车', 1));
-    expect(chen.single.quantities, containsPair('货场归剁', 50));
+    expect(chen.single.quantities, containsPair('神华归垛', 50));
   });
 
-  test('多子表合计行累加为整体对账基准', () {
+  test('多子表合计行累加为整体对账基准（神华系列独立、不污染货场类）', () {
     final result = parseXlsx(path);
     expect(result.sheetTotals, isNotNull);
-    // 南货场合计 244/648(货场归垛→货场归剁)/191/0 + 56道合计 火车装车105
-    expect(result.sheetTotals!['货场装车'], 244);
-    expect(result.sheetTotals!['货场归剁'], 648);
+    // 神华装车/神华归垛现为独立作业类型，不得并入货场装车/货场归剁。
+    // 本夹具合计行未填写神华列（合计=0），故合计基准中货场类数值保持不变：
+    expect(result.sheetTotals!['货场装车'], 244,
+        reason: '神华装车独立后，货场装车合计不应被污染');
+    expect(result.sheetTotals!['货场归剁'], 648,
+        reason: '神华归垛独立后，货场归剁合计不应被污染');
     expect(result.sheetTotals!['货场倒货'], 191);
     expect(result.sheetTotals!['火车装车'], 105);
+    // 实际映射正确性由「陈登国」记录验证（神华归垛:50，见上方测试），
+    // 以及 test/fixtures/job_type_mapping.xlsx 的专项映射测试。
   });
 
   test('挖掘机子表（含船名）按船名模式解析，不受多子表改造影响', () {

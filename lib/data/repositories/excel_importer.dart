@@ -318,7 +318,8 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
 
     if (isExcavator) {
       // 挖掘机模式：列名含「加高」→ 作业类型 = 挖掘机加高；
-      // 列名含「封跺/封垛」+「米」→ 已在列识别时按米数列过滤，不会进入 jobCols。
+      // 列名含「封垛/封跺（米）」→ 作业类型 = 封垛（米数即车数，按车算钱），
+      // 列识别阶段已放行该列，会进入 jobCols 参与车数统计。
       // 船名记入备注（方便追溯挖了哪条船），车数取各作业类型列之和。
       if (rowBoat != null && rowBoat.isNotEmpty) lastBoat = rowBoat;
       final bt = (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : lastBoat;
@@ -451,7 +452,9 @@ bool _isNonPerfSheet(String sheetName, List<dynamic> headerCells) {
         h.contains('签名') ||
         h.contains('复核') ||
         h.contains('确认') ||
-        h.contains('米') ||
+        (h.contains('米') &&
+            !h.contains('封垛') &&
+            !h.contains('封跺')) ||
         h.contains('吨') ||
         h.contains('方') ||
         h.contains('准驾') ||
@@ -570,6 +573,9 @@ DateTime? _parseDateCell(dynamic cell) {
 ///   汽出 / 汽提 / 装车 / 车数 / 汽提装车 / 货场装车 → 货场装车
 ///   外倒装车 / 倒货 / 外倒倒货 / 倒货装车 → 货场倒货
 ///   内倒 / 内倒装车（含「端货」后缀） → 内倒装车
+///   神华装车 → 神华装车（独立作业类型，不并入货场装车）
+///   神华归垛 / 神华归剁 → 神华归垛（独立作业类型，不并入货场归剁）
+///   封垛 / 封跺（米） → 封垛（挖掘机作业类型，米数即车数，按车算钱）
 /// 价格歧义消解：单纯「装车」若单价 ≈ 1.8 则视为「货场倒货」（1.2 则为「货场装车」）。
 /// 预处理：先剥离结尾的价格后缀（「(1.8)」「1.8元」「/1.8」「，端货1.8元」等），
 /// 再做字面归一，避免价格写法干扰匹配。
@@ -624,11 +630,15 @@ String _canonicalJobType(String name, {double? price}) {
   if (core.contains('加高')) return '挖掘机加高';
   // 端货：铲车作业中的端货作业，归入内倒装车（端货是内倒装车的一种）
   if (core == '端货') return '内倒装车';
-  // 神华系列：神华装车→货场装车，神华归垛/归剁→货场归剁
+  // 神华系列：作为独立作业类型，不并入货场装车/货场归剁。
+  // 神华装车→神华装车；神华归垛/神华归剁→神华归垛。
   if (core.contains('神华')) {
-    if (core.contains('装车')) return '货场装车';
-    if (core.contains('归')) return '货场归剁';
+    if (core.contains('装车')) return '神华装车';
+    if (core.contains('归')) return '神华归垛';
   }
+  // 挖掘机封垛（米）：米数即车数（按车算钱），作为独立作业类型 封垛。
+  // （列识别阶段已对「封垛/封跺（米）」放行，不再按米数列过滤丢弃。）
+  if (core.contains('封垛') || core.contains('封跺')) return '封垛';
   // 模糊兜底：core 含某些关键字时也归一
   if (core.contains('归垛') || core.contains('归剁')) {
     if (core.contains('内倒')) return '内倒归垛';
@@ -716,8 +726,11 @@ _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
     if (h.contains('签字') || h.contains('签名') || h.contains('复核') || h.contains('确认')) {
       continue;
     }
-    // 米 / 吨 / 方 等非「车次」单位列（如封跺（米））不计入车数
-    if (h.contains('米') || h.contains('吨') || h.contains('方')) {
+    // 米 / 吨 / 方 等非「车次」单位列不计入车数；
+    // 但挖掘机「封垛（米）」是作业类型，米数即车数（按车算钱），须放行、计入车数。
+    if ((h.contains('米') || h.contains('吨') || h.contains('方')) &&
+        !h.contains('封垛') &&
+        !h.contains('封跺')) {
       continue;
     }
     // 准驾车型 / 有效期 / 驾照 等花名册字段不是作业类型，避免误当归数
