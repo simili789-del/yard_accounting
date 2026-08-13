@@ -381,6 +381,12 @@ class _WorkerList extends ConsumerWidget {
     final result = state.result!;
     final allSelected = state.selectedWorkers.length == result.rows.length;
     final focused = state.focusedWorker;
+    // 统计同名出现次数，用于标注「同一人多次出现将合并统计」
+    final nameCounts = <String, int>{};
+    for (final r in result.rows) {
+      nameCounts[r.workerName] = (nameCounts[r.workerName] ?? 0) + 1;
+    }
+    final hasDuplicateName = nameCounts.values.any((n) => n > 1);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -399,12 +405,23 @@ class _WorkerList extends ConsumerWidget {
                 ),
               ],
             ),
+            if (hasDuplicateName)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '提示：同一人多次出现时（如挖掘机多船作业），导入后按人合并统计车数',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.tertiary,
+                      ),
+                ),
+              ),
             const SizedBox(height: 4),
             ...result.rows.map((row) {
               final selected = state.selectedWorkers.contains(row.workerName);
               final disabled = state.enforceFixed &&
                   focused != null &&
                   row.workerName != focused;
+              final dup = (nameCounts[row.workerName] ?? 0) > 1;
               final qty = row.quantities.entries
                   .map((e) => '${e.key}:${e.value}')
                   .join('  ');
@@ -422,6 +439,7 @@ class _WorkerList extends ConsumerWidget {
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',
                     qty,
+                    if (dup) '同一人出现多行，导入后合并统计',
                     if (disabled) '非默认姓名（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),
                 ),

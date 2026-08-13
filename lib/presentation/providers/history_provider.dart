@@ -125,7 +125,8 @@ final dayRecordsProvider =
     Provider.family<List<WorkRecord>, DateTime>((ref, date) {
   final repository = ref.watch(recordRepositoryProvider);
   final dayStart = DateTime(date.year, date.month, date.day);
-  final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
+  final dayEnd =
+      DateTime(date.year, date.month, date.day, 23, 59, 59, 999, 999);
   return repository.query(start: dayStart, end: dayEnd);
 });
 

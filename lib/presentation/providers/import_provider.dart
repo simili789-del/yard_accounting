@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/job_types.dart';
 import '../../data/repositories/excel_importer.dart';
 import '../../data/repositories/record_repository.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -198,12 +197,10 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     if (result == null) return;
     final date = state.date ?? DateTime.now();
 
-    // 1) 同步作业类型
+    // 1) 同步作业类型：确保表格出现的类型存在并带上价格；
+    //    不删除默认类型/已有类型，避免用户设置页自定义的单价被清掉。
     final notifier = _ref.read(unitPricesProvider.notifier);
     final current = Map<String, double>.from(_ref.read(unitPricesProvider));
-    for (final old in DefaultJobTypes.types) {
-      if (current.containsKey(old)) notifier.remove(old);
-    }
     for (final col in result.jobColumns) {
       final price = col.price ?? current[col.name] ?? 1.0;
       notifier.add(col.name, price);

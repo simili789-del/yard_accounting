@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/record_repository.dart';
@@ -23,17 +24,24 @@ class UnitPricesNotifier extends StateNotifier<Map<String, double>> {
   final SettingsRepository _repo;
   UnitPricesNotifier(this._repo) : super(_repo.getUnitPrices());
 
+  /// Hive 写入 fire-and-forget，落盘失败时仅打日志不阻塞 UI。
+  void _persist(Future<void> Function() write) {
+    write().catchError((Object e) {
+      debugPrint('作业类型单价写入失败: $e');
+    });
+  }
+
   void refresh() {
     state = _repo.getUnitPrices();
   }
 
   void setPrice(String jobType, double price) {
-    _repo.setUnitPrice(jobType, price);
+    _persist(() => _repo.setUnitPrice(jobType, price));
     state = Map<String, double>.from(state)..[jobType] = price;
   }
 
   void remove(String jobType) {
-    _repo.removeJobType(jobType);
+    _persist(() => _repo.removeJobType(jobType));
     state = Map<String, double>.from(state)..remove(jobType);
   }
 
@@ -41,8 +49,10 @@ class UnitPricesNotifier extends StateNotifier<Map<String, double>> {
   void rename(String oldName, String newName) {
     if (oldName == newName) return;
     final price = state[oldName] ?? 1.0;
-    _repo.setUnitPrice(newName, price);
-    _repo.removeJobType(oldName);
+    _persist(() async {
+      await _repo.setUnitPrice(newName, price);
+      await _repo.removeJobType(oldName);
+    });
     final next = Map<String, double>.from(state);
     next.remove(oldName);
     next[newName] = price;
@@ -50,7 +60,7 @@ class UnitPricesNotifier extends StateNotifier<Map<String, double>> {
   }
 
   void add(String jobType, double price) {
-    _repo.setUnitPrice(jobType, price);
+    _persist(() => _repo.setUnitPrice(jobType, price));
     state = Map<String, double>.from(state)..[jobType] = price;
   }
 }

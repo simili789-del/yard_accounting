@@ -257,6 +257,16 @@ class _SummaryCards extends ConsumerWidget {
         .where((r) => r.shift == ShiftType.night)
         .fold<int>(0, (s, r) => s + r.jobQuantities.values.fold(0, (a, b) => a + b));
 
+    // 昨日真实合计（同样聚合纯日期 + 导入记录）
+    final yesterday = DateTime(date.year, date.month, date.day - 1);
+    final yestRecords = ref.watch(dayRecordsProvider(yesterday));
+    final yestQty = yestRecords.fold<int>(
+      0,
+      (s, r) => s + r.jobQuantities.values.fold(0, (a, b) => a + b),
+    );
+    final yestAmount = yestRecords.fold<double>(
+        0, (s, r) => s + r.amount(unitPrices));
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
@@ -273,7 +283,8 @@ class _SummaryCards extends ConsumerWidget {
             child: StatCard(
               title: '今日收入',
               value: '¥${totalAmount.toStringAsFixed(2)}',
-              subtitle: '昨日合计 0车 · ¥0.00',
+              subtitle:
+                  '昨日 $yestQty车 · ¥${yestAmount.toStringAsFixed(2)}',
               valueColor: Colors.green,
             ),
           ),

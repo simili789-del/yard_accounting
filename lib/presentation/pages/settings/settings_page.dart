@@ -142,6 +142,8 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
   /// 每个作业类型对应一个 Controller，用于失焦/外部点击时读取当前输入值。
   final Map<String, TextEditingController> _nameControllers = {};
   final Map<String, TextEditingController> _priceControllers = {};
+  /// 每个作业类型独立的 FocusNode，用于判断输入框是否正在编辑（避免外部刷新覆盖输入）。
+  final Map<String, FocusNode> _priceFocusNodes = {};
   /// 每个作业类型独立的防抖 Timer，避免多个单价框互相取消保存。
   final Map<String, Timer> _priceDebounces = {};
 
@@ -156,6 +158,9 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
     }
     for (final c in _priceControllers.values) {
       c.dispose();
+    }
+    for (final f in _priceFocusNodes.values) {
+      f.dispose();
     }
     super.dispose();
   }
@@ -200,6 +205,13 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
       }
       return false;
     });
+    _priceFocusNodes.removeWhere((key, focus) {
+      if (!currentKeys.contains(key)) {
+        focus.dispose();
+        return true;
+      }
+      return false;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,6 +244,15 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                       () => TextEditingController(
                           text: price.toStringAsFixed(2)),
                     );
+                    final priceFocus = _priceFocusNodes.putIfAbsent(
+                      jobType,
+                      () => FocusNode(),
+                    );
+                    // 外部单价变化（导入/其他途径）时同步输入框，但不打断正在编辑。
+                    if (!priceFocus.hasFocus &&
+                        priceCtrl.text != price.toStringAsFixed(2)) {
+                      priceCtrl.text = price.toStringAsFixed(2);
+                    }
 
                     return Padding(
                       key: ValueKey(jobType),
@@ -267,6 +288,7 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                             flex: 1,
                             child: TextFormField(
                               controller: priceCtrl,
+                              focusNode: priceFocus,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
                                 decimal: true,
@@ -942,7 +964,8 @@ class _NumberField extends StatelessWidget {
               decoration: const InputDecoration(
                 filled: true,
               ),
-              onChanged: (v) => onChanged(double.tryParse(v) ?? value),
+              onChanged: (v) => onChanged(
+                  v.trim().isEmpty ? 0 : (double.tryParse(v) ?? value)),
             ),
           ),
         ],

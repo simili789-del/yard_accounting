@@ -31,9 +31,29 @@ class RecordRepository {
   }
 
   /// 批量写入导入记录。使用「imp_日期_姓名」复合主键，与「今日记账」的纯日期
-  /// 主键空间隔离，多人同日互不覆盖；同一人同日重复导入即覆盖更新。
+  /// 主键空间隔离，多人同日互不覆盖；同一人同日重复出现（如挖掘机表同名多船、
+  /// 多段合计）时自动合并车数、拼接备注，避免后写覆盖先写导致丢数。
   Future<void> saveImportedRecords(List<WorkRecord> records) async {
-    final map = <String, WorkRecord>{for (final r in records) r.id: r};
+    final map = <String, WorkRecord>{};
+    for (final r in records) {
+      final existing = map[r.id];
+      if (existing == null) {
+        map[r.id] = r;
+        continue;
+      }
+      // 同人同日多条：作业量累加，备注用「·」拼接，船名取第一条。
+      final mergedQty = Map<String, int>.from(existing.jobQuantities);
+      r.jobQuantities.forEach((k, v) => mergedQty[k] = (mergedQty[k] ?? 0) + v);
+      final notes = <String>[
+        if (existing.remark?.isNotEmpty == true) existing.remark!,
+        if (r.remark?.isNotEmpty == true) r.remark!,
+      ].join('·');
+      map[r.id] = existing.copyWith(
+        jobQuantities: mergedQty,
+        remark: notes.isEmpty ? null : notes,
+        boatName: existing.boatName ?? r.boatName,
+      );
+    }
     await _box.putAll(map);
   }
 

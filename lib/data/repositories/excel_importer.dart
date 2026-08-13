@@ -122,6 +122,19 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   //    签字等无用列、米/吨/方等非车次单位列直接忽略；
   //    其余列：铲车表=作业类型列，挖掘机表=车数列（由 boatCol 是否存在决定模式）。
   final headerCells = rows[headerIdx];
+  // 稀疏行补齐：部分 xlsx 解析器返回的行宽度不一致，统一补齐到表头宽度，
+  // 避免后续 rows[r][col] 越界抛 RangeError 导致导入失败。
+  if (headerCells.length > 0) {
+    for (var r = headerIdx; r < rows.length; r++) {
+      final row = rows[r];
+      if (row.length < headerCells.length) {
+        rows[r] = [
+          ...row,
+          ...List.filled(headerCells.length - row.length, ''),
+        ];
+      }
+    }
+  }
   int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol;
   final jobCols = <int, CleanedColumn>{};
   final rawJobCols = <int, String>{};
@@ -613,13 +626,15 @@ String _canonicalJobType(String name, {double? price}) {
 }
 
 /// 清洗备注：统一「叉车」写法。
-/// 表格里常写「叉」「叉车」，导入后统一记为「叉车」，方便后续筛选/统计。
+/// 表格里常写「叉」「叉车」（可能带空格/全角空格），导入后统一记为「叉车」。
 String? _cleanRemark(String? raw) {
   if (raw == null) return null;
   final t = raw.trim();
   if (t.isEmpty) return null;
-  // 精确等于「叉」或「叉车」→ 统一为「叉车」；其他备注原样保留。
-  if (t == '叉' || t == '叉车') return '叉车';
+  // 归一化空白后精确判断「叉」/「叉车」；其他备注原样保留。
+  final normalized = t.replaceAll(RegExp(r'[\s\u00A0\u200B\u200C\u200D\ufeff]'), '')
+      .replaceAll('　', '');
+  if (normalized == '叉' || normalized == '叉车') return '叉车';
   return raw;
 }
 
