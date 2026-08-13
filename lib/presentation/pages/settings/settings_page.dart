@@ -774,14 +774,25 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                   loading: _busy,
                   onPressed: () => _run(() async {
                     final repo = ref.read(recordRepositoryProvider);
+                    final srepo = ref.read(settingsRepositoryProvider);
                     final records = repo.getAllRecords();
                     if (records.isEmpty) {
                       if (mounted) _snack('暂无记录可导出');
                       return;
                     }
-                    final json = RecordSerialization.toJson(records);
+                    final backup = FullBackup(
+                      records: records,
+                      jobPrices: srepo.getUnitPrices(),
+                      salarySettings: srepo.getSalarySettings(),
+                      appSettings: srepo.getAppSettings(),
+                      fixedWorkers: srepo.getFixedWorkers(),
+                      importTemplate: srepo.getImportTemplate(),
+                    );
+                    final json = RecordSerialization.toFullBackupJson(backup);
                     await shareTextFile(json, '货场记账备份_$_stamp.json');
-                    if (mounted) _snack('已导出 ${records.length} 条记录');
+                    if (mounted) {
+                      _snack('已导出 ${records.length} 条记录及全部配置');
+                    }
                   }),
                 ),
                 _BackupButton(
@@ -795,26 +806,48 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     final path = picked?.files.single.path;
                     if (path == null) return;
                     final content = await File(path).readAsString();
-                    final records = RecordSerialization.fromJson(content);
-                    if (records.isEmpty) {
-                      if (mounted) _snack('文件中没有有效记录');
+                    final backup = RecordSerialization.parseFullBackup(content);
+                    if (backup.records.isEmpty && !backup.hasSettings) {
+                      if (mounted) _snack('文件中没有有效数据');
                       return;
                     }
                     final ok = await _confirm(
                       '恢复备份',
-                      '将用 ${records.length} 条记录覆盖当前全部数据，确定继续？',
+                      '将用 ${backup.records.length} 条记录覆盖当前全部数据，'
+                      '并恢复单价/工资构成/设置等全部配置，确定继续？',
                     );
                     if (!ok) return;
-                    await ref
-                        .read(recordRepositoryProvider)
-                        .replaceAllRecords(records);
+                    final repo = ref.read(recordRepositoryProvider);
+                    final srepo = ref.read(settingsRepositoryProvider);
+                    await repo.replaceAllRecords(backup.records);
+                    if (backup.jobPrices != null) {
+                      await srepo.replaceAllPrices(backup.jobPrices!);
+                    }
+                    if (backup.salarySettings != null) {
+                      await srepo.saveSalarySettings(backup.salarySettings!);
+                    }
+                    if (backup.appSettings != null) {
+                      await srepo.saveAppSettings(backup.appSettings!);
+                    }
+                    if (backup.fixedWorkers != null) {
+                      await srepo.setFixedWorkers(backup.fixedWorkers!);
+                    }
+                    if (backup.importTemplate != null) {
+                      await srepo.saveImportTemplate(backup.importTemplate!);
+                    }
                     ref.invalidate(historyRecordsProvider);
                     ref.invalidate(lastRecordProvider);
                     ref.invalidate(last7DaysSummaryProvider);
                     ref.invalidate(monthlyStatsProvider);
                     ref.invalidate(dayRecordsProvider);
                     ref.invalidate(selectedDateRecordProvider);
-                    if (mounted) _snack('已恢复 ${records.length} 条记录');
+                    ref.invalidate(unitPricesProvider);
+                    ref.invalidate(salarySettingsProvider);
+                    ref.invalidate(appSettingsProvider);
+                    ref.invalidate(themeModeProvider);
+                    if (mounted) {
+                      _snack('已恢复 ${backup.records.length} 条记录及全部配置');
+                    }
                   }),
                 ),
                 _BackupButton(
