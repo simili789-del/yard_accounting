@@ -28,7 +28,7 @@ workflows:
       - name: Build APK (arm64 single)
         script: |
           set -e
-          GRADLE_VER=8.14.0
+          GRADLE_VER=8.1.1
           ZIP="gradle-${GRADLE_VER}-bin.zip"
           # 放到 $HOME 持久目录（配合 cache 跨构建保留）
           DEST="$HOME/.gradle_offline"
@@ -60,10 +60,9 @@ workflows:
             echo "== 复用已缓存且有效的 Gradle 压缩包 =="
           else
             [ -f "$LOCAL_ZIP" ] && rm -f "$LOCAL_ZIP"
-            echo "== 下载 Gradle ${GRADLE_VER} (官方双源 + 断点续传 + 校验 + 重试) =="
-            download_gradle "https://services.gradle.org/distributions/${ZIP}" || \
-            download_gradle "https://downloads.gradle-dn.com/distributions/${ZIP}" || {
-              echo "ERROR: 所有源均未能取得有效的 Gradle 压缩包"; exit 1
+            echo "== 下载 Gradle ${GRADLE_VER} (官方源 + 断点续传 + 校验 + 重试) =="
+            download_gradle "https://services.gradle.org/distributions/${ZIP}" || {
+              echo "ERROR: 官方源未能取得有效的 Gradle 压缩包"; exit 1
             }
           fi
           echo "Gradle 压缩包就绪: $LOCAL_ZIP ($(du -h "$LOCAL_ZIP" | cut -f1))"
