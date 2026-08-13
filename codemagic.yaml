@@ -13,42 +13,6 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-      - name: Pre-install Gradle 8.14.0 (bypass flaky wrapper download)
-        script: |
-          set -e
-          GRADLE_VER=8.14.0
-          # 用 bin 包(比 all 小 ~30%,减少大文件在弱网下被截断的概率)
-          GRADLE_ZIP="gradle-${GRADLE_VER}-bin.zip"
-          GRADLE_URL="https://services.gradle.org/distributions/${GRADLE_ZIP}"
-          TMP_ZIP="/tmp/${GRADLE_ZIP}"
-          # 先删除可能残留的损坏半截文件,避免被当成有效缓存复用
-          rm -f "${TMP_ZIP}"
-          echo "Downloading ${GRADLE_ZIP} (带重试 + 完整性校验)..."
-          ok=0
-          for i in 1 2 3 4 5 6; do
-            curl -L --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
-              -o "${TMP_ZIP}" "${GRADLE_URL}" || true
-            if [ -f "${TMP_ZIP}" ] && \
-               python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).testzip(); print('zip ok')" "${TMP_ZIP}" >/dev/null 2>&1; then
-              echo "第 ${i} 次:下载完成且 CRC 校验通过。"
-              ok=1
-              break
-            fi
-            echo "第 ${i} 次:下载失败或文件损坏,重试..."
-            rm -f "${TMP_ZIP}"
-            sleep 5
-          done
-          if [ "$ok" != "1" ]; then
-            echo "ERROR: 6 次重试后仍未能下载到有效的 Gradle 压缩包。"
-            exit 1
-          fi
-          echo "Gradle 压缩包就绪: ${TMP_ZIP} ($(du -h "${TMP_ZIP}" | cut -f1))"
-          # 把 wrapper 的 distributionUrl 改为本地 file: 路径，彻底绕过网络下载
-          GRADLE_FILE_URL="file\\:${TMP_ZIP}"
-          sed -i.bak "s|^distributionUrl=.*|distributionUrl=${GRADLE_FILE_URL}|" \
-            android/gradle/wrapper/gradle-wrapper.properties
-          echo "Updated gradle-wrapper.properties:"
-          cat android/gradle/wrapper/gradle-wrapper.properties
       - name: Get Flutter packages
         script: flutter pub get
       - name: Generate code (Hive/Freezed)
@@ -58,7 +22,63 @@ workflows:
       - name: Run tests
         script: flutter test
       - name: Build APK (arm64 single)
-        script: flutter build apk --release --target-platform android-arm64
+        script: |
+          set -e
+          GRADLE_VER=8.14.0
+          ZIP="gradle-${GRADLE_VER}-bin.zip"
+          # 放到 $HOME(构建机持久目录),不依赖 /tmp 跨 step 可能不保留的问题
+          DEST="$HOME/.gradle_offline"
+          mkdir -p "$DEST"
+          LOCAL_ZIP="$DEST/$ZIP"
+
+          echo "== 预取 Gradle ${GRADLE_VER} 官方 sha256 校验和 =="
+          EXPECT=""
+          if curl -fSL --max-time 120 -o "$DEST/gradle.sha256" \
+               "https://services.gradle.org/distributions/${ZIP}.sha256" 2>/dev/null; then
+            EXPECT=$(tr -d '[:space:]' < "$DEST/gradle.sha256" | head -c 64)
+          fi
+          echo "期望 sha256: ${EXPECT:-<未获取,退化为结构校验>}"
+
+          echo "== 下载 Gradle(多镜像 + 校验 + 重试) =="
+          MIRRORS=(
+            "https://mirrors.cloud.tencent.com/gradle/${ZIP}"
+            "https://mirrors.aliyun.com/gradle/${ZIP}"
+            "https://services.gradle.org/distributions/${ZIP}"
+          )
+          ok=0
+          for url in "${MIRRORS[@]}"; do
+            echo "尝试镜像: $url"
+            for i in 1 2 3; do
+              if curl -fSL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
+                   -o "$LOCAL_ZIP" "$url" 2>/dev/null && \
+                 python3 -c "import zipfile,sys; sys.exit(0 if zipfile.ZipFile('$LOCAL_ZIP').testzip() is None else 1)" 2>/dev/null; then
+                if [ -n "$EXPECT" ] && command -v sha256sum >/dev/null 2>&1; then
+                  GOT=$(sha256sum "$LOCAL_ZIP" | cut -d' ' -f1)
+                  if [ "$GOT" = "$EXPECT" ]; then
+                    echo "  ✓ 第${i}次: 结构 + sha256 校验通过"; ok=1; break 2
+                  fi
+                  echo "  ✗ sha256 不符(文件损坏),换下一个镜像"; rm -f "$LOCAL_ZIP"; break
+                fi
+                echo "  ✓ 第${i}次: 结构校验通过"; ok=1; break 2
+              fi
+              echo "  ✗ 第${i}次失败,重试"; rm -f "$LOCAL_ZIP"; sleep 3
+            done
+          done
+          if [ "$ok" != "1" ]; then
+            echo "ERROR: 所有镜像均未能取得有效的 Gradle 压缩包"; exit 1
+          fi
+          echo "Gradle 压缩包就绪: $LOCAL_ZIP ($(du -h "$LOCAL_ZIP" | cut -f1))"
+
+          echo "== 清空可能损坏的 wrapper 缓存(避免复用旧坏包) =="
+          rm -rf ~/.gradle/wrapper/dists/gradle-${GRADLE_VER}-bin* || true
+
+          echo "== 将 distributionUrl 指向本地已校验包(彻底绕过网络下载) =="
+          sed -i "s|^distributionUrl=.*|distributionUrl=file://${LOCAL_ZIP}|" \
+            android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+          echo "== 构建 APK =="
+          flutter build apk --release --target-platform android-arm64
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/**/outputs/**/mapping.txt
