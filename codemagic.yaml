@@ -9,6 +9,10 @@ workflows:
       java: 17
       vars:
         PACKAGE_NAME: "com.yard.accounting"
+    # 持久缓存：第一次下载成功的 Gradle 压缩包会被缓存，后续构建直接复用，不再联网。
+    cache:
+      cache_paths:
+        - $HOME/.gradle_offline
     scripts:
       - name: Set up local.properties
         script: |
@@ -26,53 +30,46 @@ workflows:
           set -e
           GRADLE_VER=8.14.0
           ZIP="gradle-${GRADLE_VER}-bin.zip"
-          # 放到 $HOME(构建机持久目录),不依赖 /tmp 跨 step 可能不保留的问题
+          # 放到 $HOME 持久目录（配合 cache 跨构建保留）
           DEST="$HOME/.gradle_offline"
           mkdir -p "$DEST"
           LOCAL_ZIP="$DEST/$ZIP"
 
-          echo "== 预取 Gradle ${GRADLE_VER} 官方 sha256 校验和 =="
-          EXPECT=""
-          if curl -fSL --max-time 120 -o "$DEST/gradle.sha256" \
-               "https://services.gradle.org/distributions/${ZIP}.sha256" 2>/dev/null; then
-            EXPECT=$(tr -d '[:space:]' < "$DEST/gradle.sha256" | head -c 64)
-          fi
-          echo "期望 sha256: ${EXPECT:-<未获取,退化为结构校验>}"
-
-          echo "== 下载 Gradle(多镜像 + 校验 + 重试) =="
-          MIRRORS=(
-            "https://mirrors.cloud.tencent.com/gradle/${ZIP}"
-            "https://mirrors.aliyun.com/gradle/${ZIP}"
-            "https://services.gradle.org/distributions/${ZIP}"
-          )
-          ok=0
-          for url in "${MIRRORS[@]}"; do
-            echo "尝试镜像: $url"
-            for i in 1 2 3; do
-              if curl -fSL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
-                   -o "$LOCAL_ZIP" "$url" 2>/dev/null && \
-                 python3 -c "import zipfile,sys; sys.exit(0 if zipfile.ZipFile('$LOCAL_ZIP').testzip() is None else 1)" 2>/dev/null; then
-                if [ -n "$EXPECT" ] && command -v sha256sum >/dev/null 2>&1; then
-                  GOT=$(sha256sum "$LOCAL_ZIP" | cut -d' ' -f1)
-                  if [ "$GOT" = "$EXPECT" ]; then
-                    echo "  ✓ 第${i}次: 结构 + sha256 校验通过"; ok=1; break 2
-                  fi
-                  echo "  ✗ sha256 不符(文件损坏),换下一个镜像"; rm -f "$LOCAL_ZIP"; break
+          # 断点续传下载：弱网被截断可续上而非从头重下；下载后做 zip 结构校验。
+          download_gradle() {
+            local url="$1"
+            echo "尝试源: $url"
+            for i in 1 2 3 4 5 6; do
+              if curl -fL --connect-timeout 30 --max-time 900 --retry 5 --retry-delay 5 -C - \
+                   -o "$LOCAL_ZIP" "$url"; then
+                if python3 -c "import zipfile,sys; sys.exit(0 if zipfile.ZipFile('$LOCAL_ZIP').testzip() is None else 1)"; then
+                  echo "  ✓ 第${i}次: 下载完整且 zip 结构校验通过"; return 0
+                else
+                  echo "  ✗ 第${i}次: 文件损坏,删除后重试"; rm -f "$LOCAL_ZIP"
                 fi
-                echo "  ✓ 第${i}次: 结构校验通过"; ok=1; break 2
+              else
+                echo "  ✗ 第${i}次: 下载失败($?),重试"
               fi
-              echo "  ✗ 第${i}次失败,重试"; rm -f "$LOCAL_ZIP"; sleep 3
+              sleep 3
             done
-          done
-          if [ "$ok" != "1" ]; then
-            echo "ERROR: 所有镜像均未能取得有效的 Gradle 压缩包"; exit 1
+            return 1
+          }
+
+          # 若已缓存且校验通过则直接复用；否则先删损坏缓存再下载。
+          if [ -f "$LOCAL_ZIP" ] && python3 -c "import zipfile; zipfile.ZipFile('$LOCAL_ZIP').testzip()" 2>/dev/null; then
+            echo "== 复用已缓存且有效的 Gradle 压缩包 =="
+          else
+            [ -f "$LOCAL_ZIP" ] && rm -f "$LOCAL_ZIP"
+            echo "== 下载 Gradle ${GRADLE_VER} (官方双源 + 断点续传 + 校验 + 重试) =="
+            download_gradle "https://services.gradle.org/distributions/${ZIP}" || \
+            download_gradle "https://downloads.gradle-dn.com/distributions/${ZIP}" || {
+              echo "ERROR: 所有源均未能取得有效的 Gradle 压缩包"; exit 1
+            }
           fi
           echo "Gradle 压缩包就绪: $LOCAL_ZIP ($(du -h "$LOCAL_ZIP" | cut -f1))"
 
-          echo "== 清空可能损坏的 wrapper 缓存(避免复用旧坏包) =="
-          rm -rf ~/.gradle/wrapper/dists/gradle-${GRADLE_VER}-bin* || true
-
-          echo "== 将 distributionUrl 指向本地已校验包(彻底绕过网络下载) =="
+          # 将 distributionUrl 指向本地已校验包，彻底绕过构建时的网络下载。
+          # 注意：不再删除 ~/.gradle/wrapper/dists 缓存，避免误删构建机已有缓存。
           sed -i "s|^distributionUrl=.*|distributionUrl=file://${LOCAL_ZIP}|" \
             android/gradle/wrapper/gradle-wrapper.properties
           cat android/gradle/wrapper/gradle-wrapper.properties
