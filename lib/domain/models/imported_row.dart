@@ -8,6 +8,8 @@ class ImportedRow {
   final String? remark;
   final String? boatName; // 船名（挖掘机绩效等场景，可选；空即空，不继承）
   final Map<String, int> quantities; // 清洗后的作业类型名 -> 车数
+  /// 加班列的值（如「加班：3」），导入时合并进备注，不当作车数。
+  final String? overtime;
 
   ImportedRow({
     required this.workerName,
@@ -15,6 +17,7 @@ class ImportedRow {
     this.remark,
     this.boatName,
     required this.quantities,
+    this.overtime,
   });
 }
 

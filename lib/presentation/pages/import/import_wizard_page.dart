@@ -233,6 +233,12 @@ class _MappingPreview extends StatelessWidget {
                   const Chip(label: Text('车号'), avatar: Icon(Icons.local_shipping)),
                 if (result.remarkCol != null)
                   const Chip(label: Text('备注'), avatar: Icon(Icons.note)),
+                if (result.overtimeCol != null)
+                  Chip(
+                    label: const Text('加班'),
+                    avatar: const Icon(Icons.access_time),
+                    backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+                  ),
                 ...result.jobColumns.map((c) => Chip(
                       label: Text(c.price != null ? '${c.name}（¥${c.price}）' : c.name),
                       avatar: const Icon(Icons.build),

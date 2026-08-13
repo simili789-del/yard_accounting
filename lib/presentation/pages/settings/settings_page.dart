@@ -48,19 +48,28 @@ class _ProfileSection extends ConsumerStatefulWidget {
 }
 
 class _ProfileSectionState extends ConsumerState<_ProfileSection> {
-  String _workerName = '';
-  String _vehicleNo = '';
-  String _yardName = '45万货场';
-  bool _initialized = false;
+  final _workerCtrl = TextEditingController();
+  final _vehicleCtrl = TextEditingController();
+  final _yardCtrl = TextEditingController();
+  bool _synced = false;
+
+  @override
+  void dispose() {
+    _workerCtrl.dispose();
+    _vehicleCtrl.dispose();
+    _yardCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
-    if (!_initialized) {
-      _workerName = settings.defaultWorkerName;
-      _vehicleNo = settings.defaultVehicleNo;
-      _yardName = settings.yardName;
-      _initialized = true;
+    // 仅首次把已保存值填入输入框；之后由用户输入驱动，避免每次重建覆盖光标/输入。
+    if (!_synced) {
+      _workerCtrl.text = settings.defaultWorkerName;
+      _vehicleCtrl.text = settings.defaultVehicleNo;
+      _yardCtrl.text = settings.yardName;
+      _synced = true;
     }
 
     return Column(
@@ -74,30 +83,31 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
               children: [
                 _SettingsTextField(
                   label: '默认姓名',
-                  initialValue: _workerName,
-                  onChanged: (v) => _workerName = v,
+                  controller: _workerCtrl,
+                  onChanged: (v) =>
+                      ref.read(appSettingsProvider.notifier).updateDefaultWorkerName(v.trim()),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '默认车号',
-                  initialValue: _vehicleNo,
-                  onChanged: (v) => _vehicleNo = v,
+                  controller: _vehicleCtrl,
+                  onChanged: (v) =>
+                      ref.read(appSettingsProvider.notifier).updateDefaultVehicleNo(v.trim()),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '货场名称',
-                  initialValue: _yardName,
-                  onChanged: (v) => _yardName = v,
+                  controller: _yardCtrl,
+                  onChanged: (v) =>
+                      ref.read(appSettingsProvider.notifier).updateYardName(v.trim()),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: () {
-                      final notifier = ref.read(appSettingsProvider.notifier);
-                      notifier.updateDefaultWorkerName(_workerName.trim());
-                      notifier.updateDefaultVehicleNo(_vehicleNo.trim());
-                      notifier.updateYardName(_yardName.trim());
+                      // 让首页当前记录重新加载，立即反映默认姓名/车号/货场名
+                      ref.invalidate(selectedDateRecordProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('个人信息已保存')),
                       );
@@ -435,6 +445,30 @@ class _SalarySection extends ConsumerWidget {
                   value: salary.deduction,
                   onChanged: (v) => _update(ref, salary.copyWith(deduction: v)),
                 ),
+                const SizedBox(height: 12),
+                // 工资构成实时合计（不含计件收入），随输入即时刷新
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('工资构成合计（不含计件）',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      const Spacer(),
+                      Text('¥${salary.totalSalary(0).toStringAsFixed(2)}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.primary,
+                              )),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -572,17 +606,24 @@ class _TargetSection extends ConsumerStatefulWidget {
 }
 
 class _TargetSectionState extends ConsumerState<_TargetSection> {
-  int _dailyTarget = 100;
-  int _monthlyTarget = 2500;
-  bool _initialized = false;
+  final _dailyCtrl = TextEditingController();
+  final _monthlyCtrl = TextEditingController();
+  bool _synced = false;
+
+  @override
+  void dispose() {
+    _dailyCtrl.dispose();
+    _monthlyCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
-    if (!_initialized) {
-      _dailyTarget = settings.dailyTargetVehicles;
-      _monthlyTarget = settings.monthlyTargetVehicles;
-      _initialized = true;
+    if (!_synced) {
+      _dailyCtrl.text = settings.dailyTargetVehicles.toString();
+      _monthlyCtrl.text = settings.monthlyTargetVehicles.toString();
+      _synced = true;
     }
 
     return Column(
@@ -596,26 +637,27 @@ class _TargetSectionState extends ConsumerState<_TargetSection> {
               children: [
                 _SettingsTextField(
                   label: '每日目标车数',
-                  initialValue: '$_dailyTarget',
+                  controller: _dailyCtrl,
                   keyboardType: TextInputType.number,
-                  onChanged: (v) => _dailyTarget = int.tryParse(v) ?? _dailyTarget,
+                  onChanged: (v) => ref
+                      .read(appSettingsProvider.notifier)
+                      .updateDailyTarget(int.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '每月目标车数',
-                  initialValue: '$_monthlyTarget',
+                  controller: _monthlyCtrl,
                   keyboardType: TextInputType.number,
-                  onChanged: (v) =>
-                      _monthlyTarget = int.tryParse(v) ?? _monthlyTarget,
+                  onChanged: (v) => ref
+                      .read(appSettingsProvider.notifier)
+                      .updateMonthlyTarget(int.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: () {
-                      final notifier = ref.read(appSettingsProvider.notifier);
-                      notifier.updateDailyTarget(_dailyTarget);
-                      notifier.updateMonthlyTarget(_monthlyTarget);
+                      ref.invalidate(selectedDateRecordProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('目标设置已保存')),
                       );
@@ -834,12 +876,14 @@ class _BackupButton extends StatelessWidget {
 class _SettingsTextField extends StatelessWidget {
   final String label;
   final String? initialValue;
+  final TextEditingController? controller;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
 
   const _SettingsTextField({
     required this.label,
     this.initialValue,
+    this.controller,
     this.keyboardType,
     this.onChanged,
   });
@@ -847,7 +891,9 @@ class _SettingsTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      initialValue: initialValue,
+      // controller 与 initialValue 互斥：传 controller 时不再传 initialValue
+      controller: controller,
+      initialValue: controller == null ? initialValue : null,
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,

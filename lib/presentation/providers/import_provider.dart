@@ -238,6 +238,12 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
       if (state.enforceFixed && fixedSet.isNotEmpty) {
         if (!fixedSet.contains(row.workerName)) continue;
       }
+      // 加班列的值合并进备注（如「加班：3」），与原有备注用「·」连接。
+      String? remark = row.remark;
+      if (row.overtime != null && row.overtime!.isNotEmpty) {
+        final ot = '加班：${row.overtime}';
+        remark = (remark == null || remark.isEmpty) ? ot : '$remark·$ot';
+      }
       records.add(WorkRecord(
         id: RecordRepository.makeImportId(date, row.workerName),
         date: DateTime(date.year, date.month, date.day),
@@ -245,7 +251,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         vehicleNo: row.vehicleNo,
         shift: state.shift,
         jobQuantities: Map<String, int>.from(row.quantities),
-        remark: row.remark,
+        remark: remark,
         boatName: row.boatName,
       ));
     }

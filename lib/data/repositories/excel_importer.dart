@@ -16,6 +16,8 @@ class ExcelParseResult {
   final int? nameCol;
   final int? vehCol;
   final int? remarkCol;
+  /// 加班列（如「加班」「加」「加班时长」），其值记为每条记录的备注，不当作车数。
+  final int? overtimeCol;
   final List<CleanedColumn> jobColumns;
   final List<ImportedRow> rows;
   final DateTime? date;
@@ -47,6 +49,7 @@ class ExcelParseResult {
     this.nameCol,
     this.vehCol,
     this.remarkCol,
+    this.overtimeCol,
     this.boatCol,
     required this.jobColumns,
     required this.rows,
@@ -119,7 +122,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   //    签字等无用列、米/吨/方等非车次单位列直接忽略；
   //    其余列：铲车表=作业类型列，挖掘机表=车数列（由 boatCol 是否存在决定模式）。
   final headerCells = rows[headerIdx];
-  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol;
+  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol;
   final jobCols = <int, CleanedColumn>{};
   final rawJobCols = <int, String>{};
   for (int c = 0; c < headerCells.length; c++) {
@@ -147,6 +150,12 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
     if (h.contains('班次') || h.contains('白班') || h.contains('夜班') || h.contains('班别')) {
       shiftCol = c;
+      continue;
+    }
+    // 加班列：含「加班」或精确「加」（避免误伤挖掘机「加高」作业类型），
+    // 其值作为每条记录的备注，不计入车数。
+    if (h.contains('加班') || h.trim() == '加' || h.contains('加时') || h.contains('加班费')) {
+      overtimeCol = c;
       continue;
     }
     // 签字 / 签名 / 复核 / 确认 等列不参与任何识别
@@ -288,6 +297,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         workerName: name,
         vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
         remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
         boatName: null,
         quantities: {bt: cars},
       ));
@@ -303,6 +313,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         workerName: name,
         vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
         remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
       ));
@@ -330,6 +341,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       vehCol: vehCol,
       remarkCol: remarkCol,
       boatCol: boatCol,
+      overtimeCol: overtimeCol,
       jobColumns: effectiveJobCols,
       rows: result,
       date: date,
