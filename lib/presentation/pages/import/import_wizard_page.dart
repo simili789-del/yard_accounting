@@ -113,7 +113,7 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
             SwitchListTile(
               title: state.focusedWorker != null
                   ? Text('仅导入「${state.focusedWorker}」')
-                  : const Text('仅导入固定人员名单内的人'),
+                  : const Text('仅导入人员名单内的人'),
               subtitle: const Text('关闭后可勾选表格中的其他人员'),
               value: state.enforceFixed,
               onChanged: (v) =>
@@ -423,7 +423,7 @@ class _WorkerList extends ConsumerWidget {
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',
                     qty,
-                    if (disabled) '非默认姓名（关闭上方开关可导入）',
+                    if (disabled) '非名单内姓名（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),
                 ),
               );

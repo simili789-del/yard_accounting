@@ -117,21 +117,23 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
           .toList();
       final fixedSet = fixed.toSet();
 
-      // 识别设置页「默认姓名」：命中则默认只勾该人并强制仅导他；
-      // 否则回退到固定人员名单；再否则默认全选。
+      // 优先级：设置页「人员名单」> 默认姓名 > 全选。
+      // 名单在设置页维护（导入只识别并导入名单内、且出现在表格中的人），
+      // 名单外的灰显不可选（除非用户主动关闭「仅导入名单内的人」开关）。
       // 匹配均使用归一化后的字符串，兼容 Excel 单元格含不可见字符/空格差异。
       String? focusedWorker;
       Set<String> selected;
       bool enforce;
-      if (defaultName.isNotEmpty && names.contains(defaultName)) {
-        focusedWorker = repo.getAppSettings().defaultWorkerName.trim();
-        selected = {focusedWorker};
-        enforce = true;
-      } else if (fixedSet.isNotEmpty) {
-        selected = names.intersection(fixedSet)
+      if (fixedSet.isNotEmpty) {
+        selected = names
+            .intersection(fixedSet)
             .map((n) => _findOriginal(n, result.rows))
             .whereType<String>()
             .toSet();
+        enforce = true;
+      } else if (defaultName.isNotEmpty && names.contains(defaultName)) {
+        focusedWorker = repo.getAppSettings().defaultWorkerName.trim();
+        selected = {focusedWorker};
         enforce = true;
       } else {
         selected = result.rows.map((r) => r.workerName).toSet();
@@ -207,8 +209,8 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     return miss;
   }
 
-  /// 确认导入：先同步作业类型（删旧的4个默认类 + 加表格清洗出的新类与单价），
-  /// 再写入勾选人员的记录，最后保存固定人员名单。
+  /// 确认导入：先同步作业类型（删旧的默认类 + 加表格清洗出的新类与单价），
+  /// 再写入「勾选且属于设置页人员名单」的人员记录。人员名单以设置页为准，此处不回写。
   Future<void> confirm() async {
     final result = state.result;
     if (result == null) return;
@@ -228,15 +230,21 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     // 2) 构造并写入记录
     final repo = _ref.read(recordRepositoryProvider);
     final settings = _ref.read(settingsRepositoryProvider);
+    // 名单以设置页为准（已归一化，兼容空格/不可见字符差异）
     final fixedSet = state.enforceFixed
-        ? settings.getFixedWorkers().toSet()
+        ? settings
+            .getFixedWorkers()
+            .map((w) => w.replaceAll(RegExp(r'\s+'), ''))
+            .toSet()
         : <String>{};
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!state.selectedWorkers.contains(row.workerName)) continue;
-      // 强匹配：仅保留固定人员名单内的人（名单为空时等同于不过滤）
+      // 强匹配：仅保留设置页人员名单内的人（名单为空时等同于不过滤）
       if (state.enforceFixed && fixedSet.isNotEmpty) {
-        if (!fixedSet.contains(row.workerName)) continue;
+        if (!fixedSet.contains(row.workerName.replaceAll(RegExp(r'\s+'), ''))) {
+          continue;
+        }
       }
       // 加班列的值合并进备注（如「加班：3」），与原有备注用「·」连接。
       String? remark = row.remark;
@@ -265,8 +273,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     _ref.invalidate(monthlyStatsProvider);
     _ref.invalidate(dayRecordsProvider);
 
-    // 3) 沉淀固定人员名单 + 刷新联动
-    await settings.setFixedWorkers(state.selectedWorkers.toList());
+    // 3) 作业类型同步后刷新联动（人员名单以设置页为准，导入不再回写覆盖）
     _ref.read(unitPricesProvider.notifier).refresh();
 
     // 4) 记忆本次表格模板（同格式表下次自动识别）

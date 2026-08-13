@@ -249,7 +249,9 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         final totals = <String, int>{};
         for (final e in jobCols.entries) {
           final v = _toInt(rows[r][e.key]);
-          if (v != null && v > 0) totals[e.value.name] = v;
+          if (v != null && v > 0) {
+            totals[e.value.name] = (totals[e.value.name] ?? 0) + v;
+          }
         }
         if (boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
           final sum = jobCols.keys
@@ -302,11 +304,12 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         quantities: {bt: cars},
       ));
     } else {
-      // 铲车模式：各作业类型列的车数
+      // 铲车模式：各作业类型列的车数（同名标准类型跨列累加，
+      // 例如「汽出」「汽提」「装车」都归一为「货场装车」时需求和）
       final quantities = <String, int>{};
       for (final e in jobCols.entries) {
         final q = _toInt(rows[r][e.key]) ?? 0;
-        if (q > 0) quantities[e.value.name] = q;
+        if (q > 0) quantities[e.value.name] = (quantities[e.value.name] ?? 0) + q;
       }
       if (quantities.isEmpty) continue;
       result.add(ImportedRow(
@@ -524,6 +527,21 @@ DateTime? _parseDateCell(dynamic cell) {
   return DateTime.tryParse(v.replaceAll('/', '-'));
 }
 
+/// 把表格里的作业类型列名归一为系统标准类型：
+/// - 含「节数」→ 火车装车（火车车厢计数，区别于普通卡车装车）
+/// - 汽出 / 汽提 / 装车 / 货场装车 → 货场装车
+String _canonicalJobType(String name) {
+  if (name.contains('节数')) return '火车装车';
+  switch (name) {
+    case '汽出':
+    case '汽提':
+    case '装车':
+    case '货场装车':
+      return '货场装车';
+  }
+  return name;
+}
+
 /// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
 /// 兼容多种写法：
 /// 「外倒装车1.8元」→ 外倒装车 + 1.8；
@@ -535,11 +553,11 @@ CleanedColumn _cleanColumn(String raw) {
       RegExp(r'^(.*?)(?:[，,\s/]\s*)?(\d+(?:\.\d+)?)\s*元?\s*$').firstMatch(raw);
   if (m != null) {
     return CleanedColumn(
-      m.group(1)!.trim().replaceAll('，', '/'),
+      _canonicalJobType(m.group(1)!.trim().replaceAll('，', '/')),
       double.parse(m.group(2)!),
     );
   }
-  return CleanedColumn(raw.trim(), null);
+  return CleanedColumn(_canonicalJobType(raw.trim()), null);
 }
 
 // ═══════════════════════════════════════════════════════════════════

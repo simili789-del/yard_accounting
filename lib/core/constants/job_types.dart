@@ -27,6 +27,7 @@ class DefaultJobTypes {
     '外倒装车': Colors.orange,
     '内倒装车': Colors.red,
     '内倒归剁': Colors.green,
+    '火车装车': Colors.brown,
   };
 
   static Color colorOf(String jobType) =>
