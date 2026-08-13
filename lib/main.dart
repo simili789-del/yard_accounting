@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,6 +51,35 @@ Future<void> main() async {
     final priceBox = Hive.box(HiveBoxes.jobPrices);
     if (priceBox.isEmpty) {
       for (final entry in _defaultPrices.entries) {
+        await priceBox.put(entry.key, entry.value);
+      }
+    }
+
+    // 作业类型名迁移：把历史遗留的旧名统一改为新标准名，
+    // 避免老数据里「外倒装车」「内倒归剁」与新规范并存导致单价不一致。
+    // 迁移映射：旧名 → 新名（价格保留旧值；若新名已存在则取较高价）。
+    const migrationMap = {
+      '外倒装车': '货场倒货',
+      '内倒归剁': '内倒归垛',
+      '货场归垛': '货场归剁',
+      '归垛': '货场归剁',
+      '归剁': '货场归剁',
+    };
+    for (final entry in migrationMap.entries) {
+      final oldKey = entry.key;
+      final newKey = entry.value;
+      if (priceBox.containsKey(oldKey)) {
+        final oldPrice = (priceBox.get(oldKey) as num).toDouble();
+        final newPrice = priceBox.containsKey(newKey)
+            ? math.max(oldPrice, (priceBox.get(newKey) as num).toDouble())
+            : oldPrice;
+        await priceBox.put(newKey, newPrice);
+        await priceBox.delete(oldKey);
+      }
+    }
+    // 补全默认类型：确保新规范里的标准类型都有单价（缺则写默认值）
+    for (final entry in _defaultPrices.entries) {
+      if (!priceBox.containsKey(entry.key)) {
         await priceBox.put(entry.key, entry.value);
       }
     }

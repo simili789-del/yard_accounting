@@ -527,19 +527,73 @@ DateTime? _parseDateCell(dynamic cell) {
   return DateTime.tryParse(v.replaceAll('/', '-'));
 }
 
-/// 把表格里的作业类型列名归一为系统标准类型：
-/// - 含「节数」→ 火车装车（火车车厢计数，区别于普通卡车装车）
-/// - 汽出 / 汽提 / 装车 / 货场装车 → 货场装车
-String _canonicalJobType(String name) {
+/// 把表格里的作业类型列名归一为系统标准类型。
+/// 归一规则（用户指定）：
+///   含「节数」 → 火车装车
+///   归垛 / 归剁 / 货场归剁 / 货场归垛 → 货场归剁
+///   内倒归剁 / 内倒归垛 → 内倒归垛
+///   汽出 / 汽提 / 装车 / 车数 / 汽提装车 / 货场装车 → 货场装车
+///   外倒装车 / 倒货 / 外倒倒货 / 倒货装车 → 货场倒货
+///   内倒 / 内倒装车（含「端货」后缀） → 内倒装车
+/// 价格歧义消解：单纯「装车」若单价 ≈ 1.8 则视为「货场倒货」（1.2 则为「货场装车」）。
+/// 预处理：先剥离结尾的价格后缀（「(1.8)」「1.8元」「/1.8」「，端货1.8元」等），
+/// 再做字面归一，避免价格写法干扰匹配。
+String _canonicalJobType(String name, {double? price}) {
   if (name.contains('节数')) return '火车装车';
-  switch (name) {
+
+  // 预处理：去掉常见价格后缀，保留核心名称
+  // 「汽提装车(1.2)」→「汽提装车」；「内倒装车，端货1.8元」→「内倒装车」
+  var core = name;
+  // 去掉括号及内容：仅当括号在末尾且内含数字时
+  core = core.replaceAll(RegExp(r'[（(]\s*\d+(?:\.\d+)?\s*元?\s*[)）]\s*$'), '');
+  // 去掉结尾「数字 元?」
+  core = core.replaceAll(RegExp(r'[，,\s/]\s*\d+(?:\.\d+)?\s*元?\s*$'), '');
+  // 去掉结尾「，端货」「/端货」等子类型修饰
+  core = core.replaceAll(RegExp(r'[，,\s/]\s*端货\s*$'), '');
+  core = core.trim();
+
+  // 价格歧义消解：单纯「装车」根据单价区分
+  // 1.8 元的「装车」= 货场倒货；1.2 元（或无价）的「装车」= 货场装车
+  if (core == '装车' && price != null && (price - 1.8).abs() < 0.01) {
+    return '货场倒货';
+  }
+
+  // 字面归一
+  switch (core) {
+    case '归垛':
+    case '归剁':
+    case '货场归剁':
+    case '货场归垛':
+      return '货场归剁';
+    case '内倒归剁':
+    case '内倒归垛':
+      return '内倒归垛';
     case '汽出':
     case '汽提':
     case '装车':
+    case '车数':
+    case '汽提装车':
     case '货场装车':
       return '货场装车';
+    case '外倒装车':
+    case '倒货':
+    case '倒货装车':
+    case '外倒倒货':
+    case '货场倒货':
+      return '货场倒货';
+    case '内倒':
+    case '内倒装车':
+      return '内倒装车';
   }
-  return name;
+  // 模糊兜底：core 含某些关键字时也归一
+  if (core.contains('归垛') || core.contains('归剁')) {
+    if (core.contains('内倒')) return '内倒归垛';
+    return '货场归剁';
+  }
+  if (core.contains('汽提') || core.contains('汽出')) return '货场装车';
+  if (core.contains('倒货') || core.contains('外倒')) return '货场倒货';
+  if (core == '内倒' || core.contains('内倒装车')) return '内倒装车';
+  return core;
 }
 
 /// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
@@ -552,9 +606,11 @@ CleanedColumn _cleanColumn(String raw) {
   final m =
       RegExp(r'^(.*?)(?:[，,\s/]\s*)?(\d+(?:\.\d+)?)\s*元?\s*$').firstMatch(raw);
   if (m != null) {
+    final price = double.parse(m.group(2)!);
     return CleanedColumn(
-      _canonicalJobType(m.group(1)!.trim().replaceAll('，', '/')),
-      double.parse(m.group(2)!),
+      _canonicalJobType(m.group(1)!.trim().replaceAll('，', '/'),
+          price: price),
+      price,
     );
   }
   return CleanedColumn(_canonicalJobType(raw.trim()), null);
