@@ -8,6 +8,49 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
 
+/// 解析后的表头结构：姓名/车号/备注/船名/日期/班次/加班 列的位置，
+/// 以及作业类型列（列号 -> 归一后的 [CleanedColumn]）。
+///
+/// 同一工作表内常叠放多张结构不同的子表（如「南货场绩效」「56道货场绩效表」），
+/// 行解析阶段靠此结构逐行提取；遇到结构不同的新表头行会切换为新的 [_HeaderInfo]。
+class _HeaderInfo {
+  final int? nameCol;
+  final int? vehCol;
+  final int? remarkCol;
+  final int? boatCol;
+  final int? dateCol;
+  final int? shiftCol;
+  final int? overtimeCol;
+  final Map<int, CleanedColumn> jobCols;
+  final Map<int, String> rawJobCols;
+
+  /// 作业类型归一名集合，用于判断「新子表头」与「分页重复表头」。
+  final Set<String> jobNames;
+
+  int get maxCol {
+    var m = nameCol ?? -1;
+    for (final c in [vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol]) {
+      if (c != null && c > m) m = c;
+    }
+    for (final c in jobCols.keys) {
+      if (c > m) m = c;
+    }
+    return m;
+  }
+
+  _HeaderInfo({
+    required this.nameCol,
+    this.vehCol,
+    this.remarkCol,
+    this.boatCol,
+    this.dateCol,
+    this.shiftCol,
+    this.overtimeCol,
+    required this.jobCols,
+    required this.rawJobCols,
+  }) : jobNames = jobCols.values.map((c) => c.name).toSet();
+}
+
 /// 解析 xlsx/xls 的一次性结果，供导入向导直接使用。
 class ExcelParseResult {
   final List<String> sheetNames;
@@ -118,75 +161,15 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     throw Exception('表头行 $headerIdx 超出表格范围');
   }
 
-  // 2) 归类列：姓名 / 车号 / 备注 / 船名 / 日期 / 班次 单列标记；
-  //    签字等无用列、米/吨/方等非车次单位列直接忽略；
-  //    其余列：铲车表=作业类型列，挖掘机表=车数列（由 boatCol 是否存在决定模式）。
-  final headerCells = rows[headerIdx];
-  // 稀疏行补齐：部分 xlsx 解析器返回的行宽度不一致，统一补齐到表头宽度，
-  // 避免后续 rows[r][col] 越界抛 RangeError 导致导入失败。
-  if (headerCells.isNotEmpty) {
-    for (var r = headerIdx; r < rows.length; r++) {
-      final row = rows[r];
-      if (row.length < headerCells.length) {
-        rows[r] = [
-          ...row,
-          ...List.filled(headerCells.length - row.length, ''),
-        ];
-      }
-    }
-  }
-  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol;
-  final jobCols = <int, CleanedColumn>{};
-  final rawJobCols = <int, String>{};
-  for (int c = 0; c < headerCells.length; c++) {
-    final h = _text(headerCells[c]) ?? '';
-    if (h.isEmpty) continue;
-    if (h == '姓名') {
-      nameCol = c;
-      continue;
-    }
-    if (h == '车号' || h.contains('车牌') || h.contains('车辆')) {
-      vehCol = c;
-      continue;
-    }
-    if (h.contains('备注') || h.contains('说明')) {
-      remarkCol = c;
-      continue;
-    }
-    if (h.contains('船名') || h.contains('船号')) {
-      boatCol = c;
-      continue;
-    }
-    if (h.contains('日期') || h.contains('时间')) {
-      dateCol = c;
-      continue;
-    }
-    if (h.contains('班次') || h.contains('白班') || h.contains('夜班') || h.contains('班别')) {
-      shiftCol = c;
-      continue;
-    }
-    // 加班列：含「加班」或精确「加」（避免误伤挖掘机「加高」作业类型），
-    // 其值作为每条记录的备注，不计入车数。
-    if (h.contains('加班') || h.trim() == '加' || h.contains('加时') || h.contains('加班费')) {
-      overtimeCol = c;
-      continue;
-    }
-    // 签字 / 签名 / 复核 / 确认 等列不参与任何识别
-    if (h.contains('签字') || h.contains('签名') || h.contains('复核') || h.contains('确认')) {
-      continue;
-    }
-    // 米 / 吨 / 方 等非「车次」单位列（如封跺（米））不计入车数
-    if (h.contains('米') || h.contains('吨') || h.contains('方')) {
-      continue;
-    }
-    // 准驾车型 / 有效期 / 驾照 等花名册字段不是作业类型，避免误当归数
-    if (h.contains('准驾') || h.contains('车型') || h.contains('有效期') || h.contains('驾照')) {
-      continue;
-    }
-    jobCols[c] = _cleanColumn(h);
-    rawJobCols[c] = h;
-  }
-  if (nameCol == null) {
+  // 2) 归类列：把表头行解析为结构化列信息（姓名/车号/备注/船名/日期/班次/作业列）。
+  //    同一工作表内常叠放多张结构不同的子表（如「南货场绩效」「56道货场绩效表」），
+  //    行解析阶段遇到结构不同的新表头行会自动切换列映射（见下方行循环）。
+  final firstHeader = rows[headerIdx];
+  var header = _analyzeHeader(firstHeader);
+  // 收集所有子表的作业类型（按归一名去重），供结果 jobColumns 与「同步作业类型」使用。
+  final effectiveJobCols = <CleanedColumn>[...header.jobCols.values];
+  final rawJobColumnsForResult = header.rawJobCols.values.toList();
+  if (header.nameCol == null) {
     // 找不到精确的「姓名」列：该表大概率不是司机绩效表，温柔返回而非抛异常，
     // 让向导提示用户切换到含「姓名」列的绩效表。
     return ExcelParseResult(
@@ -203,7 +186,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   }
   // 挖掘机模式：存在「船名」列时，船名即作业类型（逐行向上延续填充），
   // 其余数值列（jobCols）作为该车名的车数。
-  final isExcavator = boatCol != null;
+  var isExcavator = header.boatCol != null;
 
   // 3) 解析班次与日期（取自表头上一行的 meta 行；逐单元格，支持 Excel 序列日期）
   DateTime? date;
@@ -226,23 +209,59 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   String? lastBoat; // 挖掘机表船名常合并单元格留空，向上延续
   Map<String, int>? sheetTotals;
   for (int r = headerIdx + 1; r < rows.length; r++) {
+    // 稀疏行补齐：补齐到「当前生效表头」的最大列，避免 rows[r][col] 越界。
+    // 同一 sheet 内不同子表表头宽度不同（如 56道 8 列 vs 南货场 7 列），
+    // 故按当前 header 补齐，每次切换子表头后自动适配新宽度。
+    final need = header.maxCol + 1;
+    if (rows[r].length < need) {
+      rows[r] = [
+        ...rows[r],
+        ...List.filled(need - rows[r].length, ''),
+      ];
+    }
+
     // 归一化姓名/船名内部空白（如「玛蒂尔 达」→「玛蒂尔达」），
     // 同时去除全角空格与零宽字符（Excel 复制粘贴常带入）。
-    final name = (_text(rows[r][nameCol]) ?? '')
+    final nameC = header.nameCol;
+    final name = (nameC == null ? '' : _text(rows[r][nameC]) ?? '')
         .replaceAll(RegExp(r'[\s\u00A0\u200B\u200C\u200D\ufeff]'), '')
         .replaceAll('　', '');
-    final rowBoat =
-        boatCol != null ? (_text(rows[r][boatCol]) ?? '').replaceAll(RegExp(r'\s+'), '') : null;
-    // 跳过重复表头行（分页处常再写一行『姓名/车号』）
-    if (name == '姓名') continue;
+    // 表头行（当前姓名列值为「姓名」）：可能是「分页重复表头」或「新子表头」。
+    // 把该行当表头重新解析，若作业列名集合与当前表头不同则为新子表，
+    // 切换列映射后继续；否则视为分页表头直接跳过。两者都不当作数据行。
+    if (name == '姓名') {
+      final cand = _analyzeHeader(rows[r]);
+      if (cand.nameCol != null && _isDifferentHeader(cand, header)) {
+        header = cand;
+        isExcavator = header.boatCol != null;
+        for (final c in header.jobCols.values) {
+          if (!effectiveJobCols.any((e) => e.name == c.name)) {
+            effectiveJobCols.add(c);
+          }
+        }
+      }
+      continue;
+    }
+
+    // 本行生效表头已稳定（表头行已 continue），缓存列索引到局部变量，
+    // 便于 Dart 对 int? 做 null 提升（getter 不能在条件/三元表达式中自动提升为 int）。
+    final vehC = header.vehCol;
+    final remarkC = header.remarkCol;
+    final overtimeC = header.overtimeCol;
+    final boatC = header.boatCol;
+    final rowBoat = boatC != null
+        ? (_text(rows[r][boatC]) ?? '').replaceAll(RegExp(r'\s+'), '')
+        : null;
 
     // 日期 / 班次列优先于表头 meta 行（显式列存在时逐行覆盖）
-    if (dateCol != null) {
-      final d = _parseDateCell(rows[r][dateCol]);
+    final dateC = header.dateCol;
+    if (dateC != null) {
+      final d = _parseDateCell(rows[r][dateC]);
       if (d != null) date = d;
     }
-    if (shiftCol != null) {
-      final s = _text(rows[r][shiftCol]) ?? '';
+    final shiftC = header.shiftCol;
+    if (shiftC != null) {
+      final s = _text(rows[r][shiftC]) ?? '';
       if (s.contains('夜')) {
         shift = ShiftType.night;
       } else if (s.contains('白')) {
@@ -251,44 +270,45 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     }
 
     if (name.isEmpty) {
-      // 合计行特征：车号列也空 且（作业列 或 车数列+船名）有值
-      final hasJob = jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0) ||
-          (boatCol != null &&
+      // 合计/小计行：姓名列为空但作业列有值。司机绩效表每行都有姓名，
+      // 故姓名列为空时若带车数即为合计行（如本表把「合计」写在车号列，姓名列留空）；
+      // 若无车数则是空行，直接跳过。
+      final hasJob = header.jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0) ||
+          (header.boatCol != null &&
               (rowBoat?.isNotEmpty ?? false) &&
-              jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0));
-      final vehEmpty = vehCol == null || (_text(rows[r][vehCol])?.isEmpty ?? true);
-      if (hasJob && vehEmpty) {
+              header.jobCols.keys.any((c) => (_toInt(rows[r][c]) ?? 0) > 0));
+      if (hasJob) {
         final totals = <String, int>{};
-        for (final e in jobCols.entries) {
+        for (final e in header.jobCols.entries) {
           final v = _toInt(rows[r][e.key]);
           if (v != null && v > 0) {
             totals[e.value.name] = (totals[e.value.name] ?? 0) + v;
           }
         }
-        if (boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
-          final sum = jobCols.keys
+        if (header.boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
+          final sum = header.jobCols.keys
               .map((c) => _toInt(rows[r][c]) ?? 0)
               .fold(0, (a, b) => a + b);
           if (sum > 0) totals[rowBoat!] = sum;
         }
-        if (totals.isNotEmpty) sheetTotals = totals;
+        if (totals.isNotEmpty) sheetTotals = _mergeTotals(sheetTotals, totals);
       }
       continue;
     }
     if (name.contains('制表')) continue;
     if (name.contains('合计')) {
       final totals = <String, int>{};
-      for (final e in jobCols.entries) {
+      for (final e in header.jobCols.entries) {
         final v = _toInt(rows[r][e.key]);
         if (v != null && v > 0) totals[e.value.name] = v;
       }
-      if (boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
-        final sum = jobCols.keys
+      if (header.boatCol != null && (rowBoat?.isNotEmpty ?? false)) {
+        final sum = header.jobCols.keys
             .map((c) => _toInt(rows[r][c]) ?? 0)
             .fold(0, (a, b) => a + b);
         if (sum > 0) totals[rowBoat!] = sum;
       }
-      if (totals.isNotEmpty) sheetTotals = totals;
+      if (totals.isNotEmpty) sheetTotals = _mergeTotals(sheetTotals, totals);
       continue;
     }
 
@@ -303,7 +323,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       if (rowBoat != null && rowBoat.isNotEmpty) lastBoat = rowBoat;
       final bt = (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : lastBoat;
       final quantities = <String, int>{};
-      for (final e in jobCols.entries) {
+      for (final e in header.jobCols.entries) {
         final q = _toInt(rows[r][e.key]) ?? 0;
         if (q > 0) {
           quantities[e.value.name] = (quantities[e.value.name] ?? 0) + q;
@@ -311,12 +331,12 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       }
       if (quantities.isEmpty) continue;
       // 船名写入 boatName 字段（按船分条记录，统计时自动相加），备注只保留原始备注。
-      final remark = _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null);
+      final remark = remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null;
       result.add(ImportedRow(
         workerName: name,
-        vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
+        vehicleNo: vehC != null ? (_text(rows[r][vehC]) ?? '') : '',
         remark: remark,
-        overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
+        overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (bt != null && bt.isNotEmpty) ? bt : null,
         quantities: quantities,
       ));
@@ -324,30 +344,29 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       // 铲车模式：各作业类型列的车数（同名标准类型跨列累加，
       // 例如「汽出」「汽提」「装车」都归一为「货场装车」时需求和）
       final quantities = <String, int>{};
-      for (final e in jobCols.entries) {
+      for (final e in header.jobCols.entries) {
         final q = _toInt(rows[r][e.key]) ?? 0;
         if (q > 0) quantities[e.value.name] = (quantities[e.value.name] ?? 0) + q;
       }
       if (quantities.isEmpty) continue;
       result.add(ImportedRow(
         workerName: name,
-        vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
-        remark: _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null),
-        overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
+        vehicleNo: vehC != null ? (_text(rows[r][vehC]) ?? '') : '',
+        remark: remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null,
+        overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
       ));
     }
   }
 
-  // 作业类型列：挖掘机表和铲车表都用 jobCols 的归一结果
-  // （挖掘机表的「加高（车）」→ 归一为「挖掘机加高」）
-  final effectiveJobCols = jobCols.values.toList();
+  // 作业类型列：挖掘机表和铲车表都用各子表 jobCols 的归一结果（已在行循环中累积）。
 
   // 非绩效表（考勤/工资/汇总/火车明细等）或完全无车数 → 标记为不可导入，
   // 让向导提示用户切换工作表，避免把考勤表当成绩效表污染工资数据。
-  if (_isNonPerfSheet(target, headerCells) || result.isEmpty) {
-    final reason = _isNonPerfSheet(target, headerCells)
+  // 整表是否绩效表以首个表头（firstHeader）判断，符合「按第一个表头识别整表」的预期。
+  if (_isNonPerfSheet(target, firstHeader) || result.isEmpty) {
+    final reason = _isNonPerfSheet(target, firstHeader)
         ? '该表疑似考勤/工资/汇总/火车明细表，不是司机绩效表。请选择含「姓名 + 车数」的绩效表（如铲车/装载机/挖掘机绩效）'
         : '未在该表识别到任何车数数据';
     return ExcelParseResult(
@@ -356,16 +375,16 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       sheetNames: sheetNames,
       sheetName: target,
       headerRow: headerIdx,
-      nameCol: nameCol,
-      vehCol: vehCol,
-      remarkCol: remarkCol,
-      boatCol: boatCol,
-      overtimeCol: overtimeCol,
+      nameCol: header.nameCol,
+      vehCol: header.vehCol,
+      remarkCol: header.remarkCol,
+      boatCol: header.boatCol,
+      overtimeCol: header.overtimeCol,
       jobColumns: effectiveJobCols,
       rows: result,
       date: date,
       shift: shift,
-      rawJobColumns: rawJobCols.values.toList(),
+      rawJobColumns: rawJobColumnsForResult,
       sheetTotals: sheetTotals,
       sheetImportable: sheetImportableMap,
     );
@@ -375,15 +394,15 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     sheetNames: sheetNames,
     sheetName: target,
     headerRow: headerIdx,
-    nameCol: nameCol,
-    vehCol: vehCol,
-    remarkCol: remarkCol,
-    boatCol: boatCol,
+    nameCol: header.nameCol,
+    vehCol: header.vehCol,
+    remarkCol: header.remarkCol,
+    boatCol: header.boatCol,
     jobColumns: effectiveJobCols,
     rows: result,
     date: date,
     shift: shift,
-    rawJobColumns: rawJobCols.values.toList(),
+    rawJobColumns: rawJobColumnsForResult,
     sheetTotals: sheetTotals,
     sheetImportable: sheetImportableMap,
   );
@@ -652,6 +671,92 @@ CleanedColumn _cleanColumn(String raw) {
     );
   }
   return CleanedColumn(_canonicalJobType(raw.trim()), null);
+}
+
+/// 把一行表头解析为 [_HeaderInfo]（姓名/车号/备注/船名/日期/班次/加班 + 作业列）。
+/// 逻辑与 parseXlsx 中内联的列识别一致，便于行循环内「遇到新子表头重新解析」。
+_HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
+  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol;
+  final jobCols = <int, CleanedColumn>{};
+  final rawJobCols = <int, String>{};
+  for (int c = 0; c < headerCells.length; c++) {
+    final h = _text(headerCells[c]) ?? '';
+    if (h.isEmpty) continue;
+    if (h == '姓名') {
+      nameCol = c;
+      continue;
+    }
+    if (h == '车号' || h.contains('车牌') || h.contains('车辆')) {
+      vehCol = c;
+      continue;
+    }
+    if (h.contains('备注') || h.contains('说明')) {
+      remarkCol = c;
+      continue;
+    }
+    if (h.contains('船名') || h.contains('船号')) {
+      boatCol = c;
+      continue;
+    }
+    if (h.contains('日期') || h.contains('时间')) {
+      dateCol = c;
+      continue;
+    }
+    if (h.contains('班次') || h.contains('白班') || h.contains('夜班') || h.contains('班别')) {
+      shiftCol = c;
+      continue;
+    }
+    // 加班列：含「加班」或精确「加」（避免误伤挖掘机「加高」作业类型），
+    // 其值作为每条记录的备注，不计入车数。
+    if (h.contains('加班') || h.trim() == '加' || h.contains('加时') || h.contains('加班费')) {
+      overtimeCol = c;
+      continue;
+    }
+    // 签字 / 签名 / 复核 / 确认 等列不参与任何识别
+    if (h.contains('签字') || h.contains('签名') || h.contains('复核') || h.contains('确认')) {
+      continue;
+    }
+    // 米 / 吨 / 方 等非「车次」单位列（如封跺（米））不计入车数
+    if (h.contains('米') || h.contains('吨') || h.contains('方')) {
+      continue;
+    }
+    // 准驾车型 / 有效期 / 驾照 等花名册字段不是作业类型，避免误当归数
+    if (h.contains('准驾') || h.contains('车型') || h.contains('有效期') || h.contains('驾照')) {
+      continue;
+    }
+    jobCols[c] = _cleanColumn(h);
+    rawJobCols[c] = h;
+  }
+  return _HeaderInfo(
+    nameCol: nameCol,
+    vehCol: vehCol,
+    remarkCol: remarkCol,
+    boatCol: boatCol,
+    dateCol: dateCol,
+    shiftCol: shiftCol,
+    overtimeCol: overtimeCol,
+    jobCols: jobCols,
+    rawJobCols: rawJobCols,
+  );
+}
+
+/// 判断 [cand] 是否为与 [cur] 结构不同的「新子表头」（而非分页重复表头）。
+/// 以作业类型归一名集合是否相同区分：集合相同视为同源分页表头，
+/// 集合不同（含列数不同）视为新子表，需切换列映射。
+bool _isDifferentHeader(_HeaderInfo cand, _HeaderInfo cur) {
+  if (cand.jobNames.length != cur.jobNames.length) return true;
+  for (final n in cand.jobNames) {
+    if (!cur.jobNames.contains(n)) return true;
+  }
+  return false;
+}
+
+/// 合并两组作业类型合计（同名累加），用于把同一 sheet 内多张子表的合计行
+/// 累加为整体对账基准（如南货场合计 + 56道合计）。
+Map<String, int> _mergeTotals(Map<String, int>? a, Map<String, int> b) {
+  final m = Map<String, int>.from(a ?? {});
+  b.forEach((k, v) => m[k] = (m[k] ?? 0) + v);
+  return m;
 }
 
 // ═══════════════════════════════════════════════════════════════════
