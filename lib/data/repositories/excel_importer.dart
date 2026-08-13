@@ -594,6 +594,13 @@ String _canonicalJobType(String name, {double? price}) {
   }
   // 挖掘机加高：含「加高」的列名（如「加高（车）」）→ 挖掘机加高
   if (core.contains('加高')) return '挖掘机加高';
+  // 端货：铲车作业中的端货作业，归入内倒装车（端货是内倒装车的一种）
+  if (core == '端货') return '内倒装车';
+  // 神华系列：神华装车→货场装车，神华归垛/归剁→货场归剁
+  if (core.contains('神华')) {
+    if (core.contains('装车')) return '货场装车';
+    if (core.contains('归')) return '货场归剁';
+  }
   // 模糊兜底：core 含某些关键字时也归一
   if (core.contains('归垛') || core.contains('归剁')) {
     if (core.contains('内倒')) return '内倒归垛';
