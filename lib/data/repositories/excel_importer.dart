@@ -298,7 +298,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       }
       if (quantities.isEmpty) continue;
       // 船名合并进备注（如「船名：玛蒂尔达」），与原有备注用「·」连接。
-      String? remark = remarkCol != null ? _text(rows[r][remarkCol]) : null;
+      String? remark = _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null);
       if (bt != null && bt.isNotEmpty) {
         final boatNote = '船名：$bt';
         remark = (remark == null || remark.isEmpty) ? boatNote : '$remark·$boatNote';
@@ -323,7 +323,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
-        remark: remarkCol != null ? _text(rows[r][remarkCol]) : null,
+        remark: _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null),
         overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
@@ -610,6 +610,17 @@ String _canonicalJobType(String name, {double? price}) {
   if (core.contains('倒货') || core.contains('外倒')) return '货场倒货';
   if (core == '内倒' || core.contains('内倒装车')) return '内倒装车';
   return core;
+}
+
+/// 清洗备注：统一「叉车」写法。
+/// 表格里常写「叉」「叉车」，导入后统一记为「叉车」，方便后续筛选/统计。
+String? _cleanRemark(String? raw) {
+  if (raw == null) return null;
+  final t = raw.trim();
+  if (t.isEmpty) return null;
+  // 精确等于「叉」或「叉车」→ 统一为「叉车」；其他备注原样保留。
+  if (t == '叉' || t == '叉车') return '叉车';
+  return raw;
 }
 
 /// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
