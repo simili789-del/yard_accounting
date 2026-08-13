@@ -29,7 +29,6 @@ class SettingsPage extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 32),
         children: const [
           _ProfileSection(),
-          _WorkerRosterSection(),
           _JobTypePriceSection(),
           _SalarySection(),
           _AppearanceSection(),
@@ -81,7 +80,13 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  '「默认姓名」即 Excel 导入时的目标人：导入表格只识别并导入该姓名对应的记录；清空姓名则可导入全部人员。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '默认姓名',
                   controller: _workerCtrl,
@@ -115,122 +120,6 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
                     },
                     child: const Text('保存个人信息'),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WorkerRosterSection extends ConsumerStatefulWidget {
-  const _WorkerRosterSection();
-
-  @override
-  ConsumerState<_WorkerRosterSection> createState() =>
-      _WorkerRosterSectionState();
-}
-
-class _WorkerRosterSectionState extends ConsumerState<_WorkerRosterSection> {
-  List<String> _roster = [];
-  final _nameCtrl = TextEditingController();
-  bool _synced = false;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  /// 仅首次从设置仓库读入名单，之后以本地状态为准，避免每次重建覆盖。
-  void _sync() {
-    if (!_synced) {
-      _roster = ref.read(settingsRepositoryProvider).getFixedWorkers();
-      _synced = true;
-    }
-  }
-
-  Future<void> _persist() async {
-    await ref.read(settingsRepositoryProvider).setFixedWorkers(_roster);
-  }
-
-  void _add() {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) return;
-    if (_roster.any((w) => w.trim() == name)) {
-      _nameCtrl.clear();
-      return; // 已存在，避免重复
-    }
-    setState(() => _roster = [..._roster, name]);
-    _nameCtrl.clear();
-    _persist();
-  }
-
-  void _remove(String name) {
-    setState(() => _roster = _roster.where((w) => w != name).toList());
-    _persist();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _sync();
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader('人员名单（导入只识别名单内的人）'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '在这里添加常记人员姓名。导入表格时只会识别并导入名单中、且出现在表里的人；'
-                  '名单外的人灰显不可选（可在导入页关闭「仅导入人员名单内的人」导入全部）。',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                if (_roster.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text('名单为空：导入时将导入表中所有人员',
-                        style: theme.textTheme.bodySmall),
-                  )
-                else
-                  ..._roster.map(
-                    (name) => ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: Text(name),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        tooltip: '移除',
-                        onPressed: () => _remove(name),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _nameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: '添加姓名',
-                          filled: true,
-                        ),
-                        onFieldSubmitted: (_) => _add(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加'),
-                      onPressed: _add,
-                    ),
-                  ],
                 ),
               ],
             ),

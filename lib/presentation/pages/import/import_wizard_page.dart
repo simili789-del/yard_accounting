@@ -109,11 +109,9 @@ class _ImportWizardPageState extends ConsumerState<ImportWizardPage> {
             onShift: (s) => ref.read(importProvider.notifier).setShift(s),
           ),
           const SizedBox(height: 12),
-          if (state.focusedWorker != null || state.fixedWorkers.isNotEmpty)
+          if (state.focusedWorker != null)
             SwitchListTile(
-              title: state.focusedWorker != null
-                  ? Text('仅导入「${state.focusedWorker}」')
-                  : const Text('仅导入人员名单内的人'),
+              title: Text('仅导入「${state.focusedWorker}」'),
               subtitle: const Text('关闭后可勾选表格中的其他人员'),
               value: state.enforceFixed,
               onChanged: (v) =>
@@ -382,7 +380,7 @@ class _WorkerList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final result = state.result!;
     final allSelected = state.selectedWorkers.length == result.rows.length;
-    final fixedSet = state.fixedWorkers.toSet();
+    final focused = state.focusedWorker;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -404,8 +402,9 @@ class _WorkerList extends ConsumerWidget {
             const SizedBox(height: 4),
             ...result.rows.map((row) {
               final selected = state.selectedWorkers.contains(row.workerName);
-              final inFixed = fixedSet.contains(row.workerName);
-              final disabled = state.enforceFixed && !inFixed;
+              final disabled = state.enforceFixed &&
+                  focused != null &&
+                  row.workerName != focused;
               final qty = row.quantities.entries
                   .map((e) => '${e.key}:${e.value}')
                   .join('  ');
@@ -423,7 +422,7 @@ class _WorkerList extends ConsumerWidget {
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',
                     qty,
-                    if (disabled) '非名单内姓名（关闭上方开关可导入）',
+                    if (disabled) '非默认姓名（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),
                 ),
               );

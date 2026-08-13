@@ -23,10 +23,7 @@ class ImportUiState {
   final bool done;
   final int importedCount;
 
-  /// 固定人员名单（来自设置），用于「强匹配」与名单外人员标注。
-  final List<String> fixedWorkers;
-
-  /// 强匹配开关：开启时只导入名单内人员，名单外的不可勾选。默认开。
+  /// 强匹配开关：开启时只导入「默认姓名」对应的人员；关闭时可导入全部。默认开。
   final bool enforceFixed;
 
   /// 是否匹配到历史模板（同格式表）。
@@ -45,7 +42,6 @@ class ImportUiState {
     this.shift = ShiftType.day,
     this.done = false,
     this.importedCount = 0,
-    this.fixedWorkers = const [],
     this.enforceFixed = true,
     this.templateMatched = false,
     this.focusedWorker,
@@ -61,7 +57,6 @@ class ImportUiState {
     ShiftType? shift,
     bool? done,
     int? importedCount,
-    List<String>? fixedWorkers,
     bool? enforceFixed,
     bool? templateMatched,
     String? focusedWorker,
@@ -76,7 +71,6 @@ class ImportUiState {
       shift: shift ?? this.shift,
       done: done ?? this.done,
       importedCount: importedCount ?? this.importedCount,
-      fixedWorkers: fixedWorkers ?? this.fixedWorkers,
       enforceFixed: enforceFixed ?? this.enforceFixed,
       templateMatched: templateMatched ?? this.templateMatched,
       focusedWorker: focusedWorker ?? this.focusedWorker,
@@ -93,6 +87,10 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
   final Ref _ref;
   ImportNotifier(this._ref) : super(ImportUiState());
 
+  /// 归一化辅助：去除所有空白（含零宽/不可见字符），用于稳健匹配。
+  static String normalize(String s) =>
+      s.replaceAll(RegExp(r'\s+'), '').replaceAll('　', '');
+
   Future<void> loadFile(String path,
       {String? sheetName, int? headerRow}) async {
     state = state.copyWith(
@@ -105,34 +103,19 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     );
     try {
       final result = parseXlsx(path, sheetName: sheetName, headerRow: headerRow);
-      // 归一化辅助：去除所有空白（含零宽/不可见字符），用于稳健匹配。
-      String normalize(String s) =>
-          s.replaceAll(RegExp(r'\s+'), '').replaceAll('　', '');
 
       final names = result.rows.map((r) => normalize(r.workerName)).toSet();
       final repo = _ref.read(settingsRepositoryProvider);
-      final defaultName = normalize(repo.getAppSettings().defaultWorkerName);
-      final fixed = repo.getFixedWorkers()
-          .map((w) => normalize(w))
-          .toList();
-      final fixedSet = fixed.toSet();
+      final rawDefaultName = repo.getAppSettings().defaultWorkerName.trim();
+      final defaultName = normalize(rawDefaultName);
 
-      // 优先级：设置页「人员名单」> 默认姓名 > 全选。
-      // 名单在设置页维护（导入只识别并导入名单内、且出现在表格中的人），
-      // 名单外的灰显不可选（除非用户主动关闭「仅导入名单内的人」开关）。
-      // 匹配均使用归一化后的字符串，兼容 Excel 单元格含不可见字符/空格差异。
+      // 默认姓名即导入目标人：非空且表格里有该姓名时，默认只勾选并仅导入他；
+      // 否则默认全选，不强制过滤。匹配使用归一化字符串，兼容空格/不可见字符。
       String? focusedWorker;
       Set<String> selected;
       bool enforce;
-      if (fixedSet.isNotEmpty) {
-        selected = names
-            .intersection(fixedSet)
-            .map((n) => _findOriginal(n, result.rows))
-            .whereType<String>()
-            .toSet();
-        enforce = true;
-      } else if (defaultName.isNotEmpty && names.contains(defaultName)) {
-        focusedWorker = repo.getAppSettings().defaultWorkerName.trim();
+      if (defaultName.isNotEmpty && names.contains(defaultName)) {
+        focusedWorker = rawDefaultName;
         selected = {focusedWorker};
         enforce = true;
       } else {
@@ -151,7 +134,6 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         selectedWorkers: selected,
         date: result.date,
         shift: result.shift,
-        fixedWorkers: fixed,
         enforceFixed: enforce,
         focusedWorker: focusedWorker,
         templateMatched: matched,
@@ -210,7 +192,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
   }
 
   /// 确认导入：先同步作业类型（删旧的默认类 + 加表格清洗出的新类与单价），
-  /// 再写入「勾选且属于设置页人员名单」的人员记录。人员名单以设置页为准，此处不回写。
+  /// 再写入勾选的人员记录；若强匹配开启且设置了默认姓名，则只导入默认姓名对应的记录。
   Future<void> confirm() async {
     final result = state.result;
     if (result == null) return;
@@ -230,21 +212,13 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     // 2) 构造并写入记录
     final repo = _ref.read(recordRepositoryProvider);
     final settings = _ref.read(settingsRepositoryProvider);
-    // 名单以设置页为准（已归一化，兼容空格/不可见字符差异）
-    final fixedSet = state.enforceFixed
-        ? settings
-            .getFixedWorkers()
-            .map((w) => w.replaceAll(RegExp(r'\s+'), ''))
-            .toSet()
-        : <String>{};
+    final defaultName = normalize(settings.getAppSettings().defaultWorkerName);
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!state.selectedWorkers.contains(row.workerName)) continue;
-      // 强匹配：仅保留设置页人员名单内的人（名单为空时等同于不过滤）
-      if (state.enforceFixed && fixedSet.isNotEmpty) {
-        if (!fixedSet.contains(row.workerName.replaceAll(RegExp(r'\s+'), ''))) {
-          continue;
-        }
+      // 强匹配：开启且设置了默认姓名时，只导入默认姓名对应的记录。
+      if (state.enforceFixed && defaultName.isNotEmpty) {
+        if (normalize(row.workerName) != defaultName) continue;
       }
       // 加班列的值合并进备注（如「加班：3」），与原有备注用「·」连接。
       String? remark = row.remark;
@@ -273,7 +247,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     _ref.invalidate(monthlyStatsProvider);
     _ref.invalidate(dayRecordsProvider);
 
-    // 3) 作业类型同步后刷新联动（人员名单以设置页为准，导入不再回写覆盖）
+    // 3) 作业类型同步后刷新联动
     _ref.read(unitPricesProvider.notifier).refresh();
 
     // 4) 记忆本次表格模板（同格式表下次自动识别）
@@ -290,16 +264,6 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
   int get lastImportedCount => state.importedCount;
 
   void reset() => state = ImportUiState();
-
-  /// 从归一化后的姓名在 rows 中找到原始 workerName（保留原始格式用于 selectedWorkers）。
-  static String? _findOriginal(String normalized, List<ImportedRow> rows) {
-    for (final r in rows) {
-      if (r.workerName.replaceAll(RegExp(r'\s+'), '') == normalized) {
-        return r.workerName;
-      }
-    }
-    return null;
-  }
 }
 
 /// 存放「微信/系统分享进来的待导入文件」路径；RootShell 监听后跳转向导并消费置空。
