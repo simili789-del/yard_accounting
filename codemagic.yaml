@@ -13,10 +13,10 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-      - name: Pre-install Gradle 8.7 (bypass flaky wrapper download)
+      - name: Pre-install Gradle 8.14.0 (bypass flaky wrapper download)
         script: |
           set -e
-          GRADLE_VER=8.7
+          GRADLE_VER=8.14.0
           GRADLE_ZIP="gradle-${GRADLE_VER}-all.zip"
           GRADLE_URL="https://services.gradle.org/distributions/${GRADLE_ZIP}"
           TMP_ZIP="/tmp/${GRADLE_ZIP}"
