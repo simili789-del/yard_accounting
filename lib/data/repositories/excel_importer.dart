@@ -310,18 +310,14 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         }
       }
       if (quantities.isEmpty) continue;
-      // 船名合并进备注（如「船名：玛蒂尔达」），与原有备注用「·」连接。
-      String? remark = _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null);
-      if (bt != null && bt.isNotEmpty) {
-        final boatNote = '船名：$bt';
-        remark = (remark == null || remark.isEmpty) ? boatNote : '$remark·$boatNote';
-      }
+      // 船名写入 boatName 字段（按船分条记录，统计时自动相加），备注只保留原始备注。
+      final remark = _cleanRemark(remarkCol != null ? _text(rows[r][remarkCol]) : null);
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehCol != null ? (_text(rows[r][vehCol]) ?? '') : '',
         remark: remark,
         overtime: overtimeCol != null ? _text(rows[r][overtimeCol]) : null,
-        boatName: null,
+        boatName: (bt != null && bt.isNotEmpty) ? bt : null,
         quantities: quantities,
       ));
     } else {

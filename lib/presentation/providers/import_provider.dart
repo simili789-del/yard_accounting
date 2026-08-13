@@ -210,6 +210,19 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final repo = _ref.read(recordRepositoryProvider);
     final settings = _ref.read(settingsRepositoryProvider);
     final defaultName = normalize(settings.getAppSettings().defaultWorkerName);
+    // 待导入人员：先删除他们当天旧的导入记录（同人同日覆盖，避免重复导入叠加）。
+    final workersToImport = <String>{};
+    for (final row in result.rows) {
+      if (!state.selectedWorkers.contains(row.workerName)) continue;
+      if (state.enforceFixed && defaultName.isNotEmpty) {
+        if (normalize(row.workerName) != defaultName) continue;
+      }
+      workersToImport.add(row.workerName);
+    }
+    for (final w in workersToImport) {
+      await repo.deleteImportedByWorker(date, w);
+    }
+
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!state.selectedWorkers.contains(row.workerName)) continue;
@@ -224,7 +237,9 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         remark = (remark == null || remark.isEmpty) ? ot : '$remark·$ot';
       }
       records.add(WorkRecord(
-        id: RecordRepository.makeImportId(date, row.workerName),
+        // 带船名的挖掘机记录按船分条；铲车记录按人一条。
+        id: RecordRepository.makeImportId(date, row.workerName,
+            boat: row.boatName),
         date: DateTime(date.year, date.month, date.day),
         workerName: row.workerName,
         vehicleNo: row.vehicleNo,

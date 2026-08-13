@@ -409,7 +409,7 @@ class _WorkerList extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  '提示：同一人多次出现时（如挖掘机多船作业），导入后按人合并统计车数',
+                  '提示：同一人出现多行时（如挖掘机多船作业），导入后按船名分条记录，统计自动相加',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.tertiary,
                       ),
@@ -439,7 +439,7 @@ class _WorkerList extends ConsumerWidget {
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',
                     qty,
-                    if (dup) '同一人出现多行，导入后合并统计',
+                    if (dup) '同一人多船/多行，导入后按船分条、统计相加',
                     if (disabled) '非默认姓名（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),
                 ),

@@ -57,11 +57,25 @@ class RecordRepository {
     await _box.putAll(map);
   }
 
-  /// 生成导入记录的复合主键：imp_年-月-日_姓名。
-  static String makeImportId(DateTime date, String name) {
+  /// 生成导入记录的复合主键：imp_年-月-日_姓名[_船名]。
+  /// 带船名时按船分条（挖掘机多船作业各存一条）；不带船名（铲车）按人一条。
+  static String makeImportId(DateTime date, String name, {String? boat}) {
     final d = '${date.year}-${date.month.toString().padLeft(2, '0')}'
         '-${date.day.toString().padLeft(2, '0')}';
-    return 'imp_${d}_$name';
+    final boatPart = (boat != null && boat.isNotEmpty) ? '_$boat' : '';
+    return 'imp_${d}_$name$boatPart';
+  }
+
+  /// 删除某日期某人的全部导入记录（含多船分条），用于重复导入时覆盖旧数据、
+  /// 避免叠加。仅删除 imp_ 前缀的导入记录，不影响首页「今日记账」手动记录。
+  Future<void> deleteImportedByWorker(DateTime date, String name) async {
+    final prefix = 'imp_${_dateKey(date)}_$name';
+    final ids = _box.keys
+        .where((k) => k.toString().startsWith(prefix))
+        .toList();
+    if (ids.isNotEmpty) {
+      await _box.deleteAll(ids);
+    }
   }
 
   Future<void> deleteRecords(List<String> ids) async {
