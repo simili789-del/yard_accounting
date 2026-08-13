@@ -903,7 +903,6 @@ class _BackupButton extends StatelessWidget {
 
 class _SettingsTextField extends StatelessWidget {
   final String label;
-  final String? initialValue;
   final TextEditingController? controller;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
