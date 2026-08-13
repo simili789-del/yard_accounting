@@ -17,28 +17,32 @@ workflows:
         script: |
           set -e
           GRADLE_VER=8.14.0
-          GRADLE_ZIP="gradle-${GRADLE_VER}-all.zip"
+          # 用 bin 包(比 all 小 ~30%,减少大文件在弱网下被截断的概率)
+          GRADLE_ZIP="gradle-${GRADLE_VER}-bin.zip"
           GRADLE_URL="https://services.gradle.org/distributions/${GRADLE_ZIP}"
           TMP_ZIP="/tmp/${GRADLE_ZIP}"
-          if [ -f "${TMP_ZIP}" ]; then
-            echo "Gradle zip already cached at ${TMP_ZIP}"
-          else
-            echo "Downloading ${GRADLE_ZIP} with retry..."
-            for i in 1 2 3 4 5; do
-              if curl -L --connect-timeout 30 --max-time 300 -o "${TMP_ZIP}" "${GRADLE_URL}"; then
-                echo "Download succeeded on attempt ${i}."
-                break
-              fi
-              echo "Attempt ${i} failed, retrying..."
-              rm -f "${TMP_ZIP}"
-              sleep 5
-            done
-            if [ ! -f "${TMP_ZIP}" ]; then
-              echo "ERROR: Failed to download Gradle after 5 attempts."
-              exit 1
+          # 先删除可能残留的损坏半截文件,避免被当成有效缓存复用
+          rm -f "${TMP_ZIP}"
+          echo "Downloading ${GRADLE_ZIP} (带重试 + 完整性校验)..."
+          ok=0
+          for i in 1 2 3 4 5 6; do
+            curl -L --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
+              -o "${TMP_ZIP}" "${GRADLE_URL}" || true
+            if [ -f "${TMP_ZIP}" ] && \
+               python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).testzip(); print('zip ok')" "${TMP_ZIP}" >/dev/null 2>&1; then
+              echo "第 ${i} 次:下载完成且 CRC 校验通过。"
+              ok=1
+              break
             fi
+            echo "第 ${i} 次:下载失败或文件损坏,重试..."
+            rm -f "${TMP_ZIP}"
+            sleep 5
+          done
+          if [ "$ok" != "1" ]; then
+            echo "ERROR: 6 次重试后仍未能下载到有效的 Gradle 压缩包。"
+            exit 1
           fi
-          echo "Gradle zip ready at ${TMP_ZIP}"
+          echo "Gradle 压缩包就绪: ${TMP_ZIP} ($(du -h "${TMP_ZIP}" | cut -f1))"
           # 把 wrapper 的 distributionUrl 改为本地 file: 路径，彻底绕过网络下载
           GRADLE_FILE_URL="file\\:${TMP_ZIP}"
           sed -i.bak "s|^distributionUrl=.*|distributionUrl=${GRADLE_FILE_URL}|" \
