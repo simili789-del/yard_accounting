@@ -69,8 +69,8 @@ workflows:
 
           # 将 distributionUrl 指向本地已校验包，彻底绕过构建时的网络下载。
           # 注意：不再删除 ~/.gradle/wrapper/dists 缓存，避免误删构建机已有缓存。
-          sed -i "s|^distributionUrl=.*|distributionUrl=file://${LOCAL_ZIP}|" \
-            android/gradle/wrapper/gradle-wrapper.properties
+          # 用 python 改写，规避 BSD/GNU sed 的 -i 兼容性差异（CodeMagic 构建机为 macOS）。
+          LOCAL_ZIP="$LOCAL_ZIP" python3 -c "import re,os; p='android/gradle/wrapper/gradle-wrapper.properties'; u='file://'+os.environ['LOCAL_ZIP']; s=open(p,encoding='utf-8').read(); s=re.sub(r'^distributionUrl=.*\$','distributionUrl='+u,s,flags=re.M); open(p,'w',encoding='utf-8').write(s); print('updated distributionUrl ->',u)"
           cat android/gradle/wrapper/gradle-wrapper.properties
 
           echo "== 构建 APK =="
