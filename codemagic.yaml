@@ -3,7 +3,9 @@ workflows:
     name: Android Build & Sign
     max_build_duration: 60
     environment:
-      flutter: 3.24.5
+      # 3.47.0 对应 Dart 3.7+；excel2003 依赖要求 Dart >=3.7.2。
+      # 旧版 3.24.5 (Dart 3.5.4) 会因 SDK 约束导致 pub get 失败。
+      flutter: 3.47.0
       java: 17
       vars:
         PACKAGE_NAME: "com.yard.accounting"
