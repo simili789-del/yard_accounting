@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -122,10 +123,67 @@ class _JobTypePriceSection extends ConsumerStatefulWidget {
 }
 
 class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
+  /// 每个作业类型对应一个 Controller，用于失焦/外部点击时读取当前输入值。
+  final Map<String, TextEditingController> _nameControllers = {};
+  final Map<String, TextEditingController> _priceControllers = {};
+  /// 每个作业类型独立的防抖 Timer，避免多个单价框互相取消保存。
+  final Map<String, Timer> _priceDebounces = {};
+
+  @override
+  void dispose() {
+    for (final t in _priceDebounces.values) {
+      t.cancel();
+    }
+    _priceDebounces.clear();
+    for (final c in _nameControllers.values) {
+      c.dispose();
+    }
+    for (final c in _priceControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _savePrice(String jobType, String value) {
+    final price = double.tryParse(value);
+    if (price == null) return;
+    ref.read(unitPricesProvider.notifier).setPrice(jobType, price);
+  }
+
+  void _saveName(String oldName, String value) {
+    final newName = value.trim();
+    if (newName.isEmpty || newName == oldName) return;
+    ref.read(unitPricesProvider.notifier).rename(oldName, newName);
+  }
+
   @override
   Widget build(BuildContext context) {
     final unitPrices = ref.watch(unitPricesProvider);
     final entries = unitPrices.entries.toList();
+
+    // 清理已删除作业类型的 Controller / 防抖 Timer，避免内存泄漏。
+    final currentKeys = unitPrices.keys.toSet();
+    _nameControllers.removeWhere((key, ctrl) {
+      if (!currentKeys.contains(key)) {
+        ctrl.dispose();
+        return true;
+      }
+      return false;
+    });
+    _priceControllers.removeWhere((key, ctrl) {
+      if (!currentKeys.contains(key)) {
+        ctrl.dispose();
+        return true;
+      }
+      return false;
+    });
+    _priceDebounces.removeWhere((key, timer) {
+      if (!currentKeys.contains(key)) {
+        timer.cancel();
+        return true;
+      }
+      return false;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,68 +204,101 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
                                 .onSurfaceVariant)),
                   ),
                 for (final e in entries)
-                  Padding(
-                    key: ValueKey(e.key),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: DefaultJobTypes.colorOf(e.key),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: TextFormField(
-                            initialValue: e.key,
-                            decoration: const InputDecoration(
-                              labelText: '作业类型',
-                              filled: true,
+                  Builder(builder: (_) {
+                    final jobType = e.key;
+                    final price = e.value;
+                    final nameCtrl = _nameControllers.putIfAbsent(
+                      jobType,
+                      () => TextEditingController(text: jobType),
+                    );
+                    final priceCtrl = _priceControllers.putIfAbsent(
+                      jobType,
+                      () => TextEditingController(
+                          text: price.toStringAsFixed(2)),
+                    );
+
+                    return Padding(
+                      key: ValueKey(jobType),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: DefaultJobTypes.colorOf(jobType),
+                              shape: BoxShape.circle,
                             ),
-                            onFieldSubmitted: (v) {
-                              final newName = v.trim();
-                              if (newName.isNotEmpty && newName != e.key) {
-                                ref
-                                    .read(unitPricesProvider.notifier)
-                                    .rename(e.key, newName);
-                              }
-                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 1,
-                          child: TextFormField(
-                            initialValue: e.value.toStringAsFixed(2),
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller: nameCtrl,
+                              decoration: const InputDecoration(
+                                labelText: '作业类型',
+                                filled: true,
+                              ),
+                              onFieldSubmitted: (v) => _saveName(jobType, v),
+                              onEditingComplete: () =>
+                                  _saveName(jobType, nameCtrl.text),
+                              onTapOutside: (_) =>
+                                  _saveName(jobType, nameCtrl.text),
                             ),
-                            textAlign: TextAlign.right,
-                            decoration: const InputDecoration(
-                              labelText: '单价',
-                              filled: true,
-                            ),
-                            onFieldSubmitted: (v) {
-                              final price = double.tryParse(v) ?? e.value;
-                              ref
-                                  .read(unitPricesProvider.notifier)
-                                  .setPrice(e.key, price);
-                            },
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.red),
-                          onPressed: () =>
-                              ref.read(unitPricesProvider.notifier).remove(e.key),
-                        ),
-                      ],
-                    ),
-                  ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: TextFormField(
+                              controller: priceCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              textAlign: TextAlign.right,
+                              decoration: const InputDecoration(
+                                labelText: '单价',
+                                filled: true,
+                              ),
+                              onChanged: (v) {
+                                _priceDebounces[jobType]?.cancel();
+                                _priceDebounces[jobType] = Timer(
+                                  const Duration(milliseconds: 500),
+                                  () {
+                                    if (!mounted) return;
+                                    _savePrice(jobType, v);
+                                    _priceDebounces.remove(jobType);
+                                  },
+                                );
+                              },
+                              onFieldSubmitted: (v) {
+                                _priceDebounces[jobType]?.cancel();
+                                _priceDebounces.remove(jobType);
+                                _savePrice(jobType, v);
+                              },
+                              onEditingComplete: () {
+                                _priceDebounces[jobType]?.cancel();
+                                _priceDebounces.remove(jobType);
+                                _savePrice(jobType, priceCtrl.text);
+                              },
+                              onTapOutside: (_) {
+                                _priceDebounces[jobType]?.cancel();
+                                _priceDebounces.remove(jobType);
+                                _savePrice(jobType, priceCtrl.text);
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
+                            onPressed: () => ref
+                                .read(unitPricesProvider.notifier)
+                                .remove(jobType),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                 const SizedBox(height: 8),
                 const _AddJobTypeCard(),
               ],
