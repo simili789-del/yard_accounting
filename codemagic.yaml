@@ -73,9 +73,10 @@ workflows:
           LOCAL_ZIP="$LOCAL_ZIP" python3 -c "import re,os; p='android/gradle/wrapper/gradle-wrapper.properties'; u='file://'+os.environ['LOCAL_ZIP']; s=open(p,encoding='utf-8').read(); s=re.sub(r'^distributionUrl=.*\$','distributionUrl='+u,s,flags=re.M); open(p,'w',encoding='utf-8').write(s); print('updated distributionUrl ->',u)"
           cat android/gradle/wrapper/gradle-wrapper.properties
 
-          echo "== 安装 Android SDK Platform 37 (满足 receive_sharing_intent 等插件的 compileSdk 要求) =="
+          echo "== 安装 Android SDK Platform 36 (满足 lifecycle/integration_test 等插件的 compileSdk 要求; 构建机仓库最高仅 36) =="
           # --android-skip-build-dependency-validation 会跳过 Flutter 自动安装 compileSdk 平台的步骤，
-          # 而 platforms;android-37 是 lint 任务在配置阶段就需要的依赖，必须在编译前手动装好。
+          # 而 platforms;android-36 是 lint 任务在配置阶段就需要的依赖，必须在编译前手动装好。
+          # 切勿尝试 android-37: CodeMagic 构建机 SDK 仓库不含 37 平台包。receive_sharing_intent 已降级到 1.7.0 去除其 37 强制。
           ANDROID_HOME="${ANDROID_HOME:-/usr/local/share/android-sdk}"
           SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$SDKM" ] || SDKM="$ANDROID_HOME/tools/bin/sdkmanager"
@@ -83,10 +84,10 @@ workflows:
           echo "sdkmanager: ${SDKM:-<未找到>}"
           if [ -n "$SDKM" ] && [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses >/dev/null 2>&1 || true
-            yes | "$SDKM" "platforms;android-37"
-            echo "platforms;android-37 安装结果: $?"
+            yes | "$SDKM" "platforms;android-36"
+            echo "platforms;android-36 安装结果: $?"
           else
-            echo "WARN: 未找到 sdkmanager,将依赖 Gradle 自动安装 platform 37"
+            echo "WARN: 未找到 sdkmanager,将依赖 Gradle 自动安装 platform 36"
           fi
           echo "== 构建 APK =="
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
