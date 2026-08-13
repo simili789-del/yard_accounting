@@ -161,6 +161,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     // 按原 id 写入（导入记录 id 是 imp_日期_姓名，不能用按日期覆盖的 saveRecord，
     // 否则会覆盖同日「今日记账」并造成重复统计）。
     await ref.read(recordRepositoryProvider).putRecord(updated);
+    if (!mounted) return;
     // 编辑保存后刷新全部记录相关 Provider，确保统计/今日摘要/近7天同步更新
     ref.invalidate(historyRecordsProvider);
     ref.invalidate(last7DaysSummaryProvider);

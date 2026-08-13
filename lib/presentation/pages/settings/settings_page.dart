@@ -910,7 +910,6 @@ class _SettingsTextField extends StatelessWidget {
 
   const _SettingsTextField({
     required this.label,
-    this.initialValue,
     this.controller,
     this.keyboardType,
     this.onChanged,
@@ -919,9 +918,7 @@ class _SettingsTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      // controller 与 initialValue 互斥：传 controller 时不再传 initialValue
       controller: controller,
-      initialValue: controller == null ? initialValue : null,
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,

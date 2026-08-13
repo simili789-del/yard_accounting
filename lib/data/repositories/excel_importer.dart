@@ -124,7 +124,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final headerCells = rows[headerIdx];
   // 稀疏行补齐：部分 xlsx 解析器返回的行宽度不一致，统一补齐到表头宽度，
   // 避免后续 rows[r][col] 越界抛 RangeError 导致导入失败。
-  if (headerCells.length > 0) {
+  if (headerCells.isNotEmpty) {
     for (var r = headerIdx; r < rows.length; r++) {
       final row = rows[r];
       if (row.length < headerCells.length) {
