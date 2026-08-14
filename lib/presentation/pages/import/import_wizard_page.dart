@@ -478,8 +478,7 @@ class _WorkerList extends ConsumerWidget {
               final qty = row.quantities.entries
                   .map((e) => '${e.key}:${e.value}')
                   .join('  ');
-              // 备注连同原样导入（表格里写了什么就带什么）；
-              // 仅当存在独立加班列时合并「加班：X」。预览如实反映落库内容。
+              // 备注连同原样导入（表格里写了什么就带什么），预览如实反映落库内容。
               final detail = [
                 if (showYardPerRow &&
                     row.yard != null &&
@@ -489,8 +488,6 @@ class _WorkerList extends ConsumerWidget {
                 qty,
                 if (row.remark != null && row.remark!.isNotEmpty)
                   '备注 ${row.remark}',
-                if (row.overtime != null && row.overtime!.trim().isNotEmpty)
-                  '加班 ${row.overtime}',
                 if (dup) '同一人多船/多行，导入后按船分条、统计相加',
                 if (disabled) '非默认姓名（关闭上方开关可导入）',
               ].where((s) => s.isNotEmpty).join('  ·  ');

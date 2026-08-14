@@ -265,7 +265,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     // 便于 Dart 对 int? 做 null 提升（getter 不能在条件/三元表达式中自动提升为 int）。
     final vehC = header.vehCol;
     final remarkC = header.remarkCol;
-    final overtimeC = header.overtimeCol;
     final boatC = header.boatCol;
     final rowBoat = boatC != null
         ? (_text(rows[r][boatC]) ?? '').replaceAll(RegExp(r'\s+'), '')
@@ -367,7 +366,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
         remark: remark,
-        overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (bt != null && bt.isNotEmpty) ? bt : null,
         quantities: quantities,
         yard: rowYard,
@@ -385,7 +383,6 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
         remark: remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null,
-        overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
         yard: rowYard,

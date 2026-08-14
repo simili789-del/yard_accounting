@@ -231,15 +231,10 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!keep(row)) continue;
-    // 备注连同原样导入（表格备注里写了什么就带什么）。
-    // 若表格有独立的「加班」列，则把加班值合并进备注，避免该结构化数据丢失；
-    // 不再做「叉车→叉 / 值日→值」之类冗余标签——备注里本就含这些信息，重复贴既啰嗦又无意义。
-    final parts = <String>[];
-    if (row.remark != null && row.remark!.isNotEmpty) parts.add(row.remark!);
-    if (row.overtime != null && row.overtime!.trim().isNotEmpty) {
-      parts.add('加班：${row.overtime!.trim()}');
-    }
-    final remark = parts.isEmpty ? null : parts.join('·');
+    // 备注连同原样导入（表格备注里写了什么就带什么），不做任何额外改写；
+    // 不再把「加班」列单独合并进备注——备注列本身已承载这些信息，避免重复处理。
+    final remark =
+        (row.remark != null && row.remark!.isNotEmpty) ? row.remark : null;
       records.add(WorkRecord(
         // 带船名的挖掘机记录按船分条；铲车记录按 人+货场+班次 一条。
         id: RecordRepository.makeImportId(date, row.workerName,
