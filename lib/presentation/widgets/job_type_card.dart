@@ -120,6 +120,7 @@ class _JobTypeCardState extends State<JobTypeCard> {
                       fontWeight: FontWeight.bold,
                     ),
                 onChanged: _emit,
+                onSubmitted: (_) => _focus.unfocus(),
               ),
             ),
             _StepButton(
