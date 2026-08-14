@@ -231,12 +231,17 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!keep(row)) continue;
-      // 加班列的值合并进备注（如「加班：3」），与原有备注用「·」连接。
-      String? remark = row.remark;
-      if (row.overtime != null && row.overtime!.isNotEmpty) {
-        final ot = '加班：${row.overtime}';
-        remark = (remark == null || remark.isEmpty) ? ot : '$remark·$ot';
+      // 组装备注：原备注 + 加班列（「加班：3」） + 自动派生标记（叉/值/加班）。
+      // 自动标记与已有内容做子串去重，避免「叉车」行又重复贴上「叉」。
+      final parts = <String>[];
+      if (row.remark != null && row.remark!.isNotEmpty) parts.add(row.remark!);
+      if (row.overtime != null && row.overtime!.trim().isNotEmpty) {
+        parts.add('加班：${row.overtime!.trim()}');
       }
+      for (final t in deriveRemarkTags(row.remark, overtime: row.overtime)) {
+        if (!parts.any((p) => p.contains(t))) parts.add(t);
+      }
+      final remark = parts.isEmpty ? null : parts.join('·');
       records.add(WorkRecord(
         // 带船名的挖掘机记录按船分条；铲车记录按 人+货场+班次 一条。
         id: RecordRepository.makeImportId(date, row.workerName,

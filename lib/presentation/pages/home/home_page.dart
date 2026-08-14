@@ -56,6 +56,14 @@ class _HomeBody extends ConsumerWidget {
     final jobTypes = unitPrices.keys.isNotEmpty
         ? unitPrices.keys.toList()
         : DefaultJobTypes.types;
+    // 常用作业类型常驻显示；非常用类型（火车装车/神华装车/神华归垛/挖掘机加高/封垛）
+    // 收进「其他作业类型」折叠区，默认收起，保持首页清爽。
+    final regularTypes = jobTypes
+        .where((t) => !DefaultJobTypes.advancedJobTypes.contains(t))
+        .toList();
+    final advancedTypes = jobTypes
+        .where((t) => DefaultJobTypes.advancedJobTypes.contains(t))
+        .toList();
     final selectedDate = ref.watch(selectedDateProvider);
 
     return recordAsync.when(
@@ -101,7 +109,7 @@ class _HomeBody extends ConsumerWidget {
                 .updateBasicInfo(shift: s),
           ),
           const SizedBox(height: 8),
-          ...jobTypes.map((jobType) => JobTypeCard(
+          ...regularTypes.map((jobType) => JobTypeCard(
                 jobType: jobType,
                 quantity: record.jobQuantities[jobType] ?? 0,
                 unitPrice: unitPrices[jobType] ?? 0,
@@ -109,6 +117,30 @@ class _HomeBody extends ConsumerWidget {
                     .read(selectedDateRecordProvider.notifier)
                     .updateJobQuantity(jobType, delta),
               )),
+          if (advancedTypes.isNotEmpty)
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: false,
+                leading: const Icon(Icons.tune),
+                title: const Text('其他作业类型'),
+                subtitle: Text(
+                  '${advancedTypes.join('、')}（仅相关司机使用，点击展开）',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                children: advancedTypes
+                    .map((jobType) => JobTypeCard(
+                          jobType: jobType,
+                          quantity: record.jobQuantities[jobType] ?? 0,
+                          unitPrice: unitPrices[jobType] ?? 0,
+                          onChanged: (delta) => ref
+                              .read(selectedDateRecordProvider.notifier)
+                              .updateJobQuantity(jobType, delta),
+                        ))
+                    .toList(),
+              ),
+            ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),

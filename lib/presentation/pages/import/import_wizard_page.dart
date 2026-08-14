@@ -2,22 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
 import '../../../data/repositories/excel_importer.dart';
 import '../../providers/import_provider.dart';
-
-/// 仅在「需要它的司机」导入时才展开显示的作业类型（默认折叠隐藏，减少界面 clutter）。
-/// 这些是少数司机/特殊货场才会用到的类型，其余司机导入时不应占用界面空间：
-/// - 火车装车：仅 56 道等少数司机会用到
-/// - 神华装车 / 神华归垛：神华专区专用
-/// - 挖掘机加高 / 封垛：挖掘机作业类型
-const Set<String> _advancedJobTypes = {
-  '火车装车',
-  '神华装车',
-  '神华归垛',
-  '挖掘机加高',
-  '封垛',
-};
 
 /// Excel 导入向导：接收分享或手动选文件后进入。
 /// 流程：解析 → 选 sheet/表头行 → 预览列映射 → 勾选人员 → 确认导入并同步作业类型。
@@ -216,10 +204,10 @@ class _MappingPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final advancedJobCols = result.jobColumns
-        .where((c) => _advancedJobTypes.contains(c.name))
+        .where((c) => DefaultJobTypes.advancedJobTypes.contains(c.name))
         .toList();
     final regularJobCols = result.jobColumns
-        .where((c) => !_advancedJobTypes.contains(c.name))
+        .where((c) => !DefaultJobTypes.advancedJobTypes.contains(c.name))
         .toList();
     return Card(
       child: Padding(
@@ -490,6 +478,9 @@ class _WorkerList extends ConsumerWidget {
               final qty = row.quantities.entries
                   .map((e) => '${e.key}:${e.value}')
                   .join('  ');
+              // 导入时自动派生的备注标记（叉/值/加班），预览里先让用户看到。
+              final autoTags =
+                  deriveRemarkTags(row.remark, overtime: row.overtime);
               return CheckboxListTile(
                 value: selected,
                 onChanged: disabled
@@ -508,6 +499,7 @@ class _WorkerList extends ConsumerWidget {
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',
                     qty,
+                    if (autoTags.isNotEmpty) '标记 ${autoTags.join('·')}',
                     if (dup) '同一人多船/多行，导入后按船分条、统计相加',
                     if (disabled) '非默认姓名（关闭上方开关可导入）',
                   ].where((s) => s.isNotEmpty).join('  ·  '),

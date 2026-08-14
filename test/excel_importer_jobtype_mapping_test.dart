@@ -62,4 +62,36 @@ void main() {
     final boats = wang.map((r) => r.boatName).toSet();
     expect(boats, containsAll(<String>{'海丰1', '海丰2'}));
   });
+
+  group('导入备注自动标记（deriveRemarkTags）', () {
+    test('备注含「叉车/叉」→ 标记 叉', () {
+      expect(deriveRemarkTags('叉车作业'), contains('叉'));
+      expect(deriveRemarkTags('叉'), contains('叉'));
+      expect(deriveRemarkTags('普通装车'), isNot(contains('叉')));
+    });
+
+    test('备注含「值日/值/值班」→ 标记 值', () {
+      expect(deriveRemarkTags('值日'), contains('值'));
+      expect(deriveRemarkTags('值班'), contains('值'));
+      expect(deriveRemarkTags('正常作业'), isNot(contains('值')));
+    });
+
+    test('备注含「加班/加」→ 标记 加班；加油/加高/加气 不误判', () {
+      expect(deriveRemarkTags('加班2小时'), contains('加班'));
+      expect(deriveRemarkTags('加'), contains('加班'));
+      expect(deriveRemarkTags('加油50升'), isNot(contains('加班')));
+      expect(deriveRemarkTags('加高3车'), isNot(contains('加班')));
+      expect(deriveRemarkTags('加气'), isNot(contains('加班')));
+    });
+
+    test('加班列有值即标记 加班（无论备注写没写）', () {
+      expect(deriveRemarkTags(null, overtime: '3'), contains('加班'));
+      expect(deriveRemarkTags('无备注', overtime: '2'), contains('加班'));
+    });
+
+    test('可同时命中多个标记', () {
+      final tags = deriveRemarkTags('叉车值日加班');
+      expect(tags, containsAll(<String>['叉', '值', '加班']));
+    });
+  });
 }

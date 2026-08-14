@@ -697,6 +697,40 @@ String? _cleanRemark(String? raw) {
   return raw;
 }
 
+/// 根据备注文本与加班列值，自动派生简短标记（叉 / 值 / 加班），
+/// 导入时一并写入记录备注，方便后续按标记筛选与统计。
+///
+/// 规则（与用户约定一致）：
+/// - 含「叉车」或「叉」 → 叉
+/// - 含「值日」「值」「值班」 → 值
+/// - 含「加班」「加时」「加班费」或「加」 → 加班
+///   （「加」为宽泛匹配，但排除加油/加高/加气等易误判场景）
+/// - 加班列有值（无论备注写没写）也视为「加班」
+///
+/// 注意：入参应为「清洗后」的备注（即 [ImportedRow.remark]，已含 _cleanRemark 归一，
+/// 「叉」会被归一为「叉车」），故检测「叉」仍可命中。
+Set<String> deriveRemarkTags(String? text, {String? overtime}) {
+  final tags = <String>{};
+  final src = (text ?? '')
+      .replaceAll(RegExp(r'[\s\u00A0\u200B\u200C\u200D\ufeff]'), '')
+      .replaceAll('　', '');
+  if (src.contains('叉车') || src.contains('叉')) tags.add('叉');
+  if (src.contains('值日') || src.contains('值') || src.contains('值班')) {
+    tags.add('值');
+  }
+  final hasJia = src.contains('加班') ||
+      src.contains('加时') ||
+      src.contains('加班费') ||
+      (src.contains('加') &&
+          !src.contains('加油') &&
+          !src.contains('加高') &&
+          !src.contains('加气'));
+  if (hasJia || (overtime != null && overtime.trim().isNotEmpty)) {
+    tags.add('加班');
+  }
+  return tags;
+}
+
 /// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
 /// 兼容多种写法：
 /// 「外倒装车1.8元」→ 外倒装车 + 1.8；
