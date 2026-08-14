@@ -70,6 +70,25 @@ void main() {
     expect(sun.single.vehicleNo, '119');
   });
 
+  test('车号规整：铲车与挖掘机分支均去除 .0 尾巴（含南货场铲车区）', () {
+    // 同张多区域表：上半南货场铲车区 + 下半 56道区 + 挖掘机绩效表，
+    // 任何分支的车号都不应残留浮点尾巴 .0（如 119.0 → 119、1050.0 → 1050）。
+    final cases = [
+      parseXlsx(path, sheetName: '南货场绩效'),
+      parseXlsx(path, sheetName: '56道货场绩效表'),
+      parseXlsx(path, sheetName: '挖掘机绩效'),
+    ];
+    for (final result in cases) {
+      expect(result.importable, isTrue, reason: '${result.sheetName} 应可导入');
+      for (final row in result.rows) {
+        if (row.vehicleNo.isNotEmpty) {
+          expect(row.vehicleNo.contains('.0'), isFalse,
+              reason: '车号「${row.vehicleNo}」（${row.workerName}）不应含 .0 尾巴');
+        }
+      }
+    }
+  });
+
   test('船名列识别加宽：驳船/船次等别名也能识别为船名', () {
     // 真实表格里队长的船名列写法五花八门（船名/船号/驳船/船次…），
     // 解析器用「含船/驳」宽泛匹配，确保这些别名都能正确读出船名。

@@ -231,17 +231,15 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!keep(row)) continue;
-      // 组装备注：原备注 + 加班列（「加班：3」） + 自动派生标记（叉/值/加班）。
-      // 自动标记与已有内容做子串去重，避免「叉车」行又重复贴上「叉」。
-      final parts = <String>[];
-      if (row.remark != null && row.remark!.isNotEmpty) parts.add(row.remark!);
-      if (row.overtime != null && row.overtime!.trim().isNotEmpty) {
-        parts.add('加班：${row.overtime!.trim()}');
-      }
-      for (final t in deriveRemarkTags(row.remark, overtime: row.overtime)) {
-        if (!parts.any((p) => p.contains(t))) parts.add(t);
-      }
-      final remark = parts.isEmpty ? null : parts.join('·');
+    // 备注连同原样导入（表格备注里写了什么就带什么）。
+    // 若表格有独立的「加班」列，则把加班值合并进备注，避免该结构化数据丢失；
+    // 不再做「叉车→叉 / 值日→值」之类冗余标签——备注里本就含这些信息，重复贴既啰嗦又无意义。
+    final parts = <String>[];
+    if (row.remark != null && row.remark!.isNotEmpty) parts.add(row.remark!);
+    if (row.overtime != null && row.overtime!.trim().isNotEmpty) {
+      parts.add('加班：${row.overtime!.trim()}');
+    }
+    final remark = parts.isEmpty ? null : parts.join('·');
       records.add(WorkRecord(
         // 带船名的挖掘机记录按船分条；铲车记录按 人+货场+班次 一条。
         id: RecordRepository.makeImportId(date, row.workerName,
