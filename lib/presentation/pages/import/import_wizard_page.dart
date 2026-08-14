@@ -7,8 +7,17 @@ import '../../../data/repositories/excel_importer.dart';
 import '../../providers/import_provider.dart';
 
 /// 仅在「需要它的司机」导入时才展开显示的作业类型（默认折叠隐藏，减少界面 clutter）。
-/// 例如火车装车只有 56 道等少数司机会用到，其余司机导入时不应占用界面空间。
-const Set<String> _advancedJobTypes = {'火车装车'};
+/// 这些是少数司机/特殊货场才会用到的类型，其余司机导入时不应占用界面空间：
+/// - 火车装车：仅 56 道等少数司机会用到
+/// - 神华装车 / 神华归垛：神华专区专用
+/// - 挖掘机加高 / 封垛：挖掘机作业类型
+const Set<String> _advancedJobTypes = {
+  '火车装车',
+  '神华装车',
+  '神华归垛',
+  '挖掘机加高',
+  '封垛',
+};
 
 /// Excel 导入向导：接收分享或手动选文件后进入。
 /// 流程：解析 → 选 sheet/表头行 → 预览列映射 → 勾选人员 → 确认导入并同步作业类型。
@@ -257,9 +266,13 @@ class _MappingPreview extends StatelessWidget {
             if (advancedJobCols.isNotEmpty) ...[
               const SizedBox(height: 8),
               ExpansionTile(
-                initiallyExpanded: true,
+                initiallyExpanded: false,
                 leading: const Icon(Icons.tune),
-                title: const Text('其他作业类型（火车装车等，仅相关司机使用）'),
+                title: const Text('其他作业类型'),
+                subtitle: Text(
+                  '${advancedJobCols.map((c) => c.name).join('、')}（仅相关司机使用，点击展开）',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 childrenPadding:
                     const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                 children: [
