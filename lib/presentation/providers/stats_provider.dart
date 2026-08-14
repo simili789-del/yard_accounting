@@ -47,6 +47,11 @@ class MonthlyStats {
   final int totalDayQty;
   final int totalNightQty;
 
+  /// 按货场（场地）聚合的作业总量：货场标准名（含空串「未分类」）-> 车数。
+  final Map<String, int> quantityByYard;
+  /// 按货场 × 作业类型 聚合：货场 -> (作业类型 -> 车数)，供「看清哪个货场干啥活」。
+  final Map<String, Map<String, int>> qtyByYardJob;
+
   const MonthlyStats({
     required this.month,
     required this.quantityByJobType,
@@ -58,6 +63,8 @@ class MonthlyStats {
     required this.estimatedSalary,
     required this.totalDayQty,
     required this.totalNightQty,
+    required this.quantityByYard,
+    required this.qtyByYardJob,
   });
 }
 
@@ -91,6 +98,8 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
   final incomeByWorker = <String, double>{};
   final quantityByPrice = <double, PriceGroup>{};
   final workerTemp = <String, WorkerStat>{};
+  final quantityByYard = <String, int>{};
+  final qtyByYardJob = <String, Map<String, int>>{};
   double totalIncome = 0;
   int totalDayQty = 0;
   int totalNightQty = 0;
@@ -99,6 +108,12 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
     final amount = r.amount(unitPrices);
     final qty = r.jobQuantities.values.fold<int>(0, (a, b) => a + b);
     final dayKey = DateTime(r.date.year, r.date.month, r.date.day);
+    final yard = r.yard ?? '';
+    quantityByYard[yard] = (quantityByYard[yard] ?? 0) + qty;
+    final yj = qtyByYardJob.putIfAbsent(yard, () => <String, int>{});
+    r.jobQuantities.forEach((jt, q2) {
+      yj[jt] = (yj[jt] ?? 0) + q2;
+    });
 
     r.jobQuantities.forEach((jobType, q) {
       quantityByJobType[jobType] = (quantityByJobType[jobType] ?? 0) + q;
@@ -150,5 +165,7 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
     estimatedSalary: salary.totalSalary(totalIncome),
     totalDayQty: totalDayQty,
     totalNightQty: totalNightQty,
+    quantityByYard: quantityByYard,
+    qtyByYardJob: qtyByYardJob,
   );
 });

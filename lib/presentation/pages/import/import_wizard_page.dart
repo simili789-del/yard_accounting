@@ -435,6 +435,8 @@ class _WorkerList extends ConsumerWidget {
                 title: Text(row.workerName),
                 subtitle: Text(
                   [
+                    if (row.yard != null && row.yard!.isNotEmpty)
+                      '货场 ${row.yard}',
                     if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
                     if (row.boatName != null && row.boatName!.isNotEmpty)
                       '船名 ${row.boatName}',

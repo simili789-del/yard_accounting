@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/job_types.dart';
+import '../../../core/constants/yards.dart';
 import '../../../domain/entities/work_record.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
@@ -26,6 +27,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
   late ShiftType _shift;
   late Map<String, int> _jobQuantities;
   late String _remark;
+  late String? _yard;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     _shift = widget.record.shift;
     _jobQuantities = Map<String, int>.from(widget.record.jobQuantities);
     _remark = widget.record.remark ?? '';
+    _yard = widget.record.yard;
   }
 
   @override
@@ -99,6 +102,22 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
             selected: {_shift},
             onSelectionChanged: (s) => setState(() => _shift = s.first),
           ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: DropdownButtonFormField<String?>(
+              value: _yard,
+              decoration: const InputDecoration(labelText: '货场'),
+              items: <DropdownMenuItem<String?>>[
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('未分类')),
+                ...Yards.standardYards.map<DropdownMenuItem<String?>>(
+                  (y) => DropdownMenuItem<String?>(value: y, child: Text(y)),
+                ),
+              ],
+              onChanged: (v) => setState(() => _yard = v),
+            ),
+          ),
           const SizedBox(height: 16),
           Text('作业类型', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -157,6 +176,7 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
       jobQuantities: _jobQuantities,
       remark: _remark,
       boatName: _boatName.isEmpty ? null : _boatName,
+      yard: _yard,
     );
     // 按原 id 写入（导入记录 id 是 imp_日期_姓名，不能用按日期覆盖的 saveRecord，
     // 否则会覆盖同日「今日记账」并造成重复统计）。

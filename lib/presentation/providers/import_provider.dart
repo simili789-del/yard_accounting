@@ -4,6 +4,7 @@ import '../../data/repositories/excel_importer.dart';
 import '../../data/repositories/record_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../domain/entities/work_record.dart';
+import '../../domain/models/imported_row.dart';
 import '../providers/history_provider.dart';
 import '../providers/repository_providers.dart';
 import '../providers/selected_date_record_provider.dart';
@@ -209,26 +210,27 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final repo = _ref.read(recordRepositoryProvider);
     final settings = _ref.read(settingsRepositoryProvider);
     final defaultName = normalize(settings.getAppSettings().defaultWorkerName);
-    // 待导入人员：先删除他们当天旧的导入记录（同人同日覆盖，避免重复导入叠加）。
-    final workersToImport = <String>{};
-    for (final row in result.rows) {
-      if (!state.selectedWorkers.contains(row.workerName)) continue;
+    bool keep(ImportedRow row) {
+      if (!state.selectedWorkers.contains(row.workerName)) return false;
       if (state.enforceFixed && defaultName.isNotEmpty) {
-        if (normalize(row.workerName) != defaultName) continue;
+        if (normalize(row.workerName) != defaultName) return false;
       }
-      workersToImport.add(row.workerName);
+      return true;
     }
-    for (final w in workersToImport) {
-      await repo.deleteImportedByWorker(date, w);
+
+    // 待导入记录的（人+货场+班次）组合去重，按组合精准删除旧记录：
+    // 只清掉同一货场同一班次的旧数据，绝不误删其他货场/班次（多表导入不丢数）。
+    final combos = <(String, String?, ShiftType)>{};
+    for (final row in result.rows) {
+      if (keep(row)) combos.add((row.workerName, row.yard, state.shift));
+    }
+    for (final (name, yard, shift) in combos) {
+      await repo.deleteImportedByWorker(date, name, yard: yard, shift: shift);
     }
 
     final records = <WorkRecord>[];
     for (final row in result.rows) {
-      if (!state.selectedWorkers.contains(row.workerName)) continue;
-      // 强匹配：开启且设置了默认姓名时，只导入默认姓名对应的记录。
-      if (state.enforceFixed && defaultName.isNotEmpty) {
-        if (normalize(row.workerName) != defaultName) continue;
-      }
+      if (!keep(row)) continue;
       // 加班列的值合并进备注（如「加班：3」），与原有备注用「·」连接。
       String? remark = row.remark;
       if (row.overtime != null && row.overtime!.isNotEmpty) {
@@ -236,9 +238,9 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         remark = (remark == null || remark.isEmpty) ? ot : '$remark·$ot';
       }
       records.add(WorkRecord(
-        // 带船名的挖掘机记录按船分条；铲车记录按人一条。
+        // 带船名的挖掘机记录按船分条；铲车记录按 人+货场+班次 一条。
         id: RecordRepository.makeImportId(date, row.workerName,
-            boat: row.boatName),
+            yard: row.yard, shift: state.shift, boat: row.boatName),
         date: DateTime(date.year, date.month, date.day),
         workerName: row.workerName,
         vehicleNo: row.vehicleNo,
@@ -246,6 +248,7 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
         jobQuantities: Map<String, int>.from(row.quantities),
         remark: remark,
         boatName: row.boatName,
+        yard: row.yard,
       ));
     }
     await repo.saveImportedRecords(records);

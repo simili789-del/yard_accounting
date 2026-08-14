@@ -56,6 +56,7 @@ class RecordSerialization {
       _csv('金额'),
       _csv('备注'),
       _csv('船名'),
+      _csv('货场'),
     ].join(','));
 
     for (final r in records) {
@@ -73,6 +74,7 @@ class RecordSerialization {
         _csv(r.amount(unitPrices).toStringAsFixed(2)),
         _csv(r.remark ?? ''),
         _csv(r.boatName ?? ''),
+        _csv(r.yard ?? ''),
       ].join(','));
     }
     return buf.toString();
@@ -89,6 +91,7 @@ class RecordSerialization {
       'jobQuantities': r.jobQuantities,
       'remark': r.remark,
       'boatName': r.boatName,
+      'yard': r.yard,
     }).toList();
     return jsonEncode({'version': 1, 'records': list});
   }
@@ -131,6 +134,7 @@ class RecordSerialization {
         jobQuantities: jq,
         remark: m['remark']?.toString() ?? m['note']?.toString(),
         boatName: m['boatName']?.toString(),
+        yard: m['yard']?.toString(),
       ));
     }
     return records;
@@ -177,6 +181,7 @@ class RecordSerialization {
       'jobQuantities': r.jobQuantities,
       'remark': r.remark,
       'boatName': r.boatName,
+      'yard': r.yard,
     }).toList();
     return jsonEncode({'version': 2, 'records': recordList, 'settings': settings});
   }

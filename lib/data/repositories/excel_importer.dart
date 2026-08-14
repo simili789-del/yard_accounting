@@ -7,6 +7,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
+import '../../core/constants/yards.dart';
 
 /// 解析后的表头结构：姓名/车号/备注/船名/日期/班次/加班 列的位置，
 /// 以及作业类型列（列号 -> 归一后的 [CleanedColumn]）。
@@ -21,6 +22,8 @@ class _HeaderInfo {
   final int? dateCol;
   final int? shiftCol;
   final int? overtimeCol;
+  /// 货场（场地）列：表内显式「场地/货场/区域」列时，逐行取该列值作为本行货场。
+  final int? yardCol;
   final Map<int, CleanedColumn> jobCols;
   final Map<int, String> rawJobCols;
 
@@ -29,7 +32,7 @@ class _HeaderInfo {
 
   int get maxCol {
     var m = nameCol ?? -1;
-    for (final c in [vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol]) {
+    for (final c in [vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol, yardCol]) {
       if (c != null && c > m) m = c;
     }
     for (final c in jobCols.keys) {
@@ -46,6 +49,7 @@ class _HeaderInfo {
     this.dateCol,
     this.shiftCol,
     this.overtimeCol,
+    this.yardCol,
     required this.jobCols,
     required this.rawJobCols,
   }) : jobNames = jobCols.values.map((c) => c.name).toSet();
@@ -65,6 +69,10 @@ class ExcelParseResult {
   final List<ImportedRow> rows;
   final DateTime? date;
   final ShiftType shift;
+
+  /// 整表识别出的默认货场（取自表/区域标题或 sheet 名）；多区域表为首个区域货场。
+  /// 仅作 UI 兜底展示，逐行货场以 [ImportedRow.yard] 为准。
+  final String? yard;
 
   /// 船名列（可选；挖掘机绩效表的船名常在表头为空的 A 列）。
   final int? boatCol;
@@ -98,6 +106,7 @@ class ExcelParseResult {
     required this.rows,
     this.date,
     required this.shift,
+    this.yard,
     this.rawJobColumns = const [],
     this.sheetTotals,
     this.importable = true,
@@ -166,6 +175,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   //    行解析阶段遇到结构不同的新表头行会自动切换列映射（见下方行循环）。
   final firstHeader = rows[headerIdx];
   var header = _analyzeHeader(firstHeader);
+  // 货场识别：默认以表/区域标题或 sheet 名为整表货场（sheetYard）；
+  // 行循环遇新子表头（如下半区「56道货场绩效表」）时按区域标题更新 currentYard，
+  // 使同一张表上下两个货场的记录各自归属正确，统计不串。
+  var currentYard = _detectSheetYard(target, rows, headerIdx);
+  final sheetYard = currentYard;
   // 收集所有子表的作业类型（按归一名去重），供结果 jobColumns 与「同步作业类型」使用。
   final effectiveJobCols = <CleanedColumn>[...header.jobCols.values];
   final rawJobColumnsForResult = header.rawJobCols.values.toList();
@@ -181,6 +195,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       jobColumns: const [],
       rows: const [],
       shift: ShiftType.day,
+      yard: null,
       sheetImportable: sheetImportableMap,
     );
   }
@@ -239,6 +254,9 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
             effectiveJobCols.add(c);
           }
         }
+        // 切换到新子表头：向上扫描区域标题（如「56道货场绩效表」）更新货场归属。
+        final regionYard = _detectRegionYard(rows, r);
+        if (regionYard != null) currentYard = regionYard;
       }
       continue;
     }
@@ -316,6 +334,18 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     // 跳过以免把车数挂到一个假人员上污染人员库。
     if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(name)) continue;
 
+    // 货场归属：区域标题（currentYard）为默认；若本表有「场地」列则取列值；
+    // 否则若本行备注含货场关键字（如挖掘机「五六道」卸船）则用备注货场。
+    String? rowYard = currentYard;
+    final yardColIdx = header.yardCol;
+    if (yardColIdx != null) {
+      final yc = Yards.canonicalYard(_text(rows[r][yardColIdx]) ?? '');
+      if (yc != null) rowYard = yc;
+    } else if (remarkC != null) {
+      final rc = Yards.canonicalYard(_text(rows[r][remarkC]) ?? '');
+      if (rc != null) rowYard = rc;
+    }
+
     if (isExcavator) {
       // 挖掘机模式：列名含「加高」→ 作业类型 = 挖掘机加高；
       // 列名含「封垛/封跺（米）」→ 作业类型 = 封垛（米数即车数，按车算钱），
@@ -340,6 +370,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (bt != null && bt.isNotEmpty) ? bt : null,
         quantities: quantities,
+        yard: rowYard,
       ));
     } else {
       // 铲车模式：各作业类型列的车数（同名标准类型跨列累加，
@@ -357,6 +388,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
+        yard: rowYard,
       ));
     }
   }
@@ -381,14 +413,15 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       remarkCol: header.remarkCol,
       boatCol: header.boatCol,
       overtimeCol: header.overtimeCol,
-      jobColumns: effectiveJobCols,
-      rows: result,
-      date: date,
-      shift: shift,
-      rawJobColumns: rawJobColumnsForResult,
-      sheetTotals: sheetTotals,
-      sheetImportable: sheetImportableMap,
-    );
+        jobColumns: effectiveJobCols,
+        rows: result,
+        date: date,
+        shift: shift,
+        yard: sheetYard,
+        rawJobColumns: rawJobColumnsForResult,
+        sheetTotals: sheetTotals,
+        sheetImportable: sheetImportableMap,
+      );
   }
 
   return ExcelParseResult(
@@ -403,6 +436,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     rows: result,
     date: date,
     shift: shift,
+    yard: sheetYard,
     rawJobColumns: rawJobColumnsForResult,
     sheetTotals: sheetTotals,
     sheetImportable: sheetImportableMap,
@@ -686,7 +720,7 @@ CleanedColumn _cleanColumn(String raw) {
 /// 把一行表头解析为 [_HeaderInfo]（姓名/车号/备注/船名/日期/班次/加班 + 作业列）。
 /// 逻辑与 parseXlsx 中内联的列识别一致，便于行循环内「遇到新子表头重新解析」。
 _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
-  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol;
+  int? nameCol, vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol, yardCol;
   final jobCols = <int, CleanedColumn>{};
   final rawJobCols = <int, String>{};
   for (int c = 0; c < headerCells.length; c++) {
@@ -706,6 +740,13 @@ _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
     }
     if (h.contains('船名') || h.contains('船号')) {
       boatCol = c;
+      continue;
+    }
+    // 货场（场地）列：表内显式「场地/区域」或独立「货场」列时，逐行取该列值作货场。
+    // 注意只认独立列名，避免把「货场装车/货场归垛」等作业类型误判为货场列。
+    if (h == '货场' || h.contains('场地') || h.contains('区域')) {
+      final ycIdx = c;
+      yardCol = ycIdx;
       continue;
     }
     if (h.contains('日期') || h.contains('时间')) {
@@ -748,9 +789,44 @@ _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
     dateCol: dateCol,
     shiftCol: shiftCol,
     overtimeCol: overtimeCol,
+    yardCol: yardCol,
     jobCols: jobCols,
     rawJobCols: rawJobCols,
   );
+}
+
+/// 识别整表（首个区域）的货场：先看 sheet 名，再看表头上方标题行。
+/// 取不到返回 null，交 UI 手动兜底。
+String? _detectSheetYard(String sheetName, List<List<dynamic>> rows, int headerIdx) {
+  final fromName = Yards.canonicalYard(sheetName);
+  if (fromName != null) return fromName;
+  for (int r = 0; r < headerIdx; r++) {
+    for (final c in rows[r]) {
+      final t = _text(c);
+      if (t != null && t.isNotEmpty) {
+        final y = Yards.canonicalYard(t);
+        if (y != null) return y;
+      }
+    }
+  }
+  return null;
+}
+
+/// 识别新子表头所属区域的货场：向上扫描 1~3 行，命中含货场关键字的标题单元格
+/// （如「56道货场绩效表」）即返回。取不到返回 null（沿用当前区域货场）。
+String? _detectRegionYard(List<List<dynamic>> rows, int headerRow) {
+  for (int k = 1; k <= 3; k++) {
+    final rr = headerRow - k;
+    if (rr < 0) break;
+    for (final c in rows[rr]) {
+      final t = _text(c);
+      if (t != null && t.isNotEmpty) {
+        final y = Yards.canonicalYard(t);
+        if (y != null) return y;
+      }
+    }
+  }
+  return null;
 }
 
 /// 判断 [cand] 是否为与 [cur] 结构不同的「新子表头」（而非分页重复表头）。

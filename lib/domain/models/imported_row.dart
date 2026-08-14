@@ -10,6 +10,9 @@ class ImportedRow {
   final Map<String, int> quantities; // 清洗后的作业类型名 -> 车数
   /// 加班列的值（如「加班：3」），导入时合并进备注，不当作车数。
   final String? overtime;
+  /// 货场（场地）：由导入器按区域标题 / 表标题 / 场地列 / 备注识别。
+  /// null 表示未能识别，落库后按「未分类」处理。
+  final String? yard;
 
   ImportedRow({
     required this.workerName,
@@ -18,6 +21,7 @@ class ImportedRow {
     this.boatName,
     required this.quantities,
     this.overtime,
+    this.yard,
   });
 }
 
