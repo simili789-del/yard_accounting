@@ -90,22 +90,28 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
                 _SettingsTextField(
                   label: '默认姓名',
                   controller: _workerCtrl,
-                  onChanged: (v) =>
-                      ref.read(appSettingsProvider.notifier).updateDefaultWorkerName(v.trim()),
+                  onChanged:
+                      (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateDefaultWorkerName(v.trim()),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '默认车号',
                   controller: _vehicleCtrl,
-                  onChanged: (v) =>
-                      ref.read(appSettingsProvider.notifier).updateDefaultVehicleNo(v.trim()),
+                  onChanged:
+                      (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateDefaultVehicleNo(v.trim()),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '货场名称',
                   controller: _yardCtrl,
-                  onChanged: (v) =>
-                      ref.read(appSettingsProvider.notifier).updateYardName(v.trim()),
+                  onChanged:
+                      (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateYardName(v.trim()),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -114,9 +120,9 @@ class _ProfileSectionState extends ConsumerState<_ProfileSection> {
                     onPressed: () {
                       // 让首页当前记录重新加载，立即反映默认姓名/车号/货场名
                       ref.invalidate(selectedDateRecordProvider);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('个人信息已保存')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('个人信息已保存')));
                     },
                     child: const Text('保存个人信息'),
                   ),
@@ -142,10 +148,15 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
   /// 每个作业类型对应一个 Controller，用于失焦/外部点击时读取当前输入值。
   final Map<String, TextEditingController> _nameControllers = {};
   final Map<String, TextEditingController> _priceControllers = {};
+
   /// 每个作业类型独立的 FocusNode，用于判断输入框是否正在编辑（避免外部刷新覆盖输入）。
   final Map<String, FocusNode> _priceFocusNodes = {};
+
   /// 每个作业类型独立的防抖 Timer，避免多个单价框互相取消保存。
   final Map<String, Timer> _priceDebounces = {};
+
+  /// 整块「作业类型与单价」是否展开，默认收起以节省设置页竖向空间。
+  bool _expanded = false;
 
   @override
   void dispose() {
@@ -216,133 +227,152 @@ class _JobTypePriceSectionState extends ConsumerState<_JobTypePriceSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader('作业类型与单价（元/车）'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                if (entries.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text('暂无作业类型，可在下方添加',
-                        style: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant)),
-                  ),
-                for (final e in entries)
-                  Builder(builder: (_) {
-                    final jobType = e.key;
-                    final price = e.value;
-                    final nameCtrl = _nameControllers.putIfAbsent(
-                      jobType,
-                      () => TextEditingController(text: jobType),
-                    );
-                    final priceCtrl = _priceControllers.putIfAbsent(
-                      jobType,
-                      () => TextEditingController(
-                          text: price.toStringAsFixed(2)),
-                    );
-                    final priceFocus = _priceFocusNodes.putIfAbsent(
-                      jobType,
-                      () => FocusNode(),
-                    );
-                    // 外部单价变化（导入/其他途径）时同步输入框，但不打断正在编辑。
-                    if (!priceFocus.hasFocus &&
-                        priceCtrl.text != price.toStringAsFixed(2)) {
-                      priceCtrl.text = price.toStringAsFixed(2);
-                    }
-
-                    return Padding(
-                      key: ValueKey(jobType),
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: DefaultJobTypes.colorOf(jobType),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: nameCtrl,
-                              decoration: const InputDecoration(
-                                labelText: '作业类型',
-                                filled: true,
-                              ),
-                              onFieldSubmitted: (v) => _saveName(jobType, v),
-                              onEditingComplete: () =>
-                                  _saveName(jobType, nameCtrl.text),
-                              onTapOutside: (_) =>
-                                  _saveName(jobType, nameCtrl.text),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 1,
-                            child: TextFormField(
-                              controller: priceCtrl,
-                              focusNode: priceFocus,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              textAlign: TextAlign.right,
-                              decoration: const InputDecoration(
-                                labelText: '单价',
-                                filled: true,
-                              ),
-                              onChanged: (v) {
-                                _priceDebounces[jobType]?.cancel();
-                                _priceDebounces[jobType] = Timer(
-                                  const Duration(milliseconds: 500),
-                                  () {
-                                    if (!mounted) return;
-                                    _savePrice(jobType, v);
-                                    _priceDebounces.remove(jobType);
-                                  },
-                                );
-                              },
-                              onFieldSubmitted: (v) {
-                                _priceDebounces[jobType]?.cancel();
-                                _priceDebounces.remove(jobType);
-                                _savePrice(jobType, v);
-                              },
-                              onEditingComplete: () {
-                                _priceDebounces[jobType]?.cancel();
-                                _priceDebounces.remove(jobType);
-                                _savePrice(jobType, priceCtrl.text);
-                              },
-                              onTapOutside: (_) {
-                                _priceDebounces[jobType]?.cancel();
-                                _priceDebounces.remove(jobType);
-                                _savePrice(jobType, priceCtrl.text);
-                              },
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
-                            onPressed: () => ref
-                                .read(unitPricesProvider.notifier)
-                                .remove(jobType),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                const SizedBox(height: 8),
-                const _AddJobTypeCard(),
-              ],
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: SectionHeader(
+            '作业类型与单价（元/车）',
+            trailing: Icon(
+              _expanded ? Icons.expand_less : Icons.expand_more,
+              size: 22,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
+        if (_expanded)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  if (entries.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        '暂无作业类型，可在下方添加',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  for (final e in entries)
+                    Builder(
+                      builder: (_) {
+                        final jobType = e.key;
+                        final price = e.value;
+                        final nameCtrl = _nameControllers.putIfAbsent(
+                          jobType,
+                          () => TextEditingController(text: jobType),
+                        );
+                        final priceCtrl = _priceControllers.putIfAbsent(
+                          jobType,
+                          () => TextEditingController(
+                            text: price.toStringAsFixed(2),
+                          ),
+                        );
+                        final priceFocus = _priceFocusNodes.putIfAbsent(
+                          jobType,
+                          () => FocusNode(),
+                        );
+                        // 外部单价变化（导入/其他途径）时同步输入框，但不打断正在编辑。
+                        if (!priceFocus.hasFocus &&
+                            priceCtrl.text != price.toStringAsFixed(2)) {
+                          priceCtrl.text = price.toStringAsFixed(2);
+                        }
+
+                        return Padding(
+                          key: ValueKey(jobType),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: DefaultJobTypes.colorOf(jobType),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: nameCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '作业类型',
+                                    filled: true,
+                                  ),
+                                  onFieldSubmitted:
+                                      (v) => _saveName(jobType, v),
+                                  onEditingComplete:
+                                      () => _saveName(jobType, nameCtrl.text),
+                                  onTapOutside:
+                                      (_) => _saveName(jobType, nameCtrl.text),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 1,
+                                child: TextFormField(
+                                  controller: priceCtrl,
+                                  focusNode: priceFocus,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  textAlign: TextAlign.right,
+                                  decoration: const InputDecoration(
+                                    labelText: '单价',
+                                    filled: true,
+                                  ),
+                                  onChanged: (v) {
+                                    _priceDebounces[jobType]?.cancel();
+                                    _priceDebounces[jobType] = Timer(
+                                      const Duration(milliseconds: 500),
+                                      () {
+                                        if (!mounted) return;
+                                        _savePrice(jobType, v);
+                                        _priceDebounces.remove(jobType);
+                                      },
+                                    );
+                                  },
+                                  onFieldSubmitted: (v) {
+                                    _priceDebounces[jobType]?.cancel();
+                                    _priceDebounces.remove(jobType);
+                                    _savePrice(jobType, v);
+                                  },
+                                  onEditingComplete: () {
+                                    _priceDebounces[jobType]?.cancel();
+                                    _priceDebounces.remove(jobType);
+                                    _savePrice(jobType, priceCtrl.text);
+                                  },
+                                  onTapOutside: (_) {
+                                    _priceDebounces[jobType]?.cancel();
+                                    _priceDebounces.remove(jobType);
+                                    _savePrice(jobType, priceCtrl.text);
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
+                                onPressed:
+                                    () => ref
+                                        .read(unitPricesProvider.notifier)
+                                        .remove(jobType),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                  const _AddJobTypeCard(),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -396,11 +426,13 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                   Icon(Icons.add_circle_outline, color: scheme.primary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('新增作业类型',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: scheme.onSurface,
-                        )),
+                    child: Text(
+                      '新增作业类型',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
+                    ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
@@ -436,8 +468,9 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
                             labelText: '单价',
                             filled: true,
                           ),
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                         ),
                       ),
                     ],
@@ -478,13 +511,14 @@ class _SalarySection extends ConsumerWidget {
                 _NumberField(
                   label: '基本底薪',
                   value: salary.baseSalary,
-                  onChanged: (v) => _update(ref, salary.copyWith(baseSalary: v)),
+                  onChanged:
+                      (v) => _update(ref, salary.copyWith(baseSalary: v)),
                 ),
                 _NumberField(
                   label: '餐补',
                   value: salary.mealAllowance,
-                  onChanged: (v) =>
-                      _update(ref, salary.copyWith(mealAllowance: v)),
+                  onChanged:
+                      (v) => _update(ref, salary.copyWith(mealAllowance: v)),
                 ),
                 _NumberField(
                   label: '加班',
@@ -494,8 +528,8 @@ class _SalarySection extends ConsumerWidget {
                 _NumberField(
                   label: '工龄/奖金',
                   value: salary.seniorityBonus,
-                  onChanged: (v) =>
-                      _update(ref, salary.copyWith(seniorityBonus: v)),
+                  onChanged:
+                      (v) => _update(ref, salary.copyWith(seniorityBonus: v)),
                 ),
                 _NumberField(
                   label: '扣款',
@@ -505,24 +539,31 @@ class _SalarySection extends ConsumerWidget {
                 const SizedBox(height: 12),
                 // 工资构成实时合计（不含计件收入），随输入即时刷新
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      Text('工资构成合计（不含计件）',
-                          style: Theme.of(context).textTheme.bodyMedium),
+                      Text(
+                        '工资构成合计（不含计件）',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                       const Spacer(),
-                      Text('¥${salary.totalSalary(0).toStringAsFixed(2)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.primary,
-                              )),
+                      Text(
+                        '¥${salary.totalSalary(0).toStringAsFixed(2)}',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -531,9 +572,9 @@ class _SalarySection extends ConsumerWidget {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('工资设置已保存')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('工资设置已保存')));
                     },
                     child: const Text('保存工资设置'),
                   ),
@@ -569,9 +610,12 @@ class _AppearanceSection extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('主题颜色',
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface)),
+                Text(
+                  '主题颜色',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,
@@ -579,31 +623,38 @@ class _AppearanceSection extends ConsumerWidget {
                     final color = AppTheme.primaries[i];
                     final selected = settings.primaryColorIndex == i;
                     return InkWell(
-                      onTap: () => ref
-                          .read(appSettingsProvider.notifier)
-                          .updatePrimaryColorIndex(i),
+                      onTap:
+                          () => ref
+                              .read(appSettingsProvider.notifier)
+                              .updatePrimaryColorIndex(i),
                       child: Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
                           color: color,
                           shape: BoxShape.circle,
-                          border: selected
-                              ? Border.all(color: Colors.white, width: 3)
-                              : null,
-                          boxShadow: selected
-                              ? [
-                                  BoxShadow(
-                                    color: color.withOpacity(0.5),
-                                    blurRadius: 8,
-                                  ),
-                                ]
-                              : null,
+                          border:
+                              selected
+                                  ? Border.all(color: Colors.white, width: 3)
+                                  : null,
+                          boxShadow:
+                              selected
+                                  ? [
+                                    BoxShadow(
+                                      color: color.withOpacity(0.5),
+                                      blurRadius: 8,
+                                    ),
+                                  ]
+                                  : null,
                         ),
-                        child: selected
-                            ? const Icon(Icons.check,
-                                color: Colors.white, size: 20)
-                            : null,
+                        child:
+                            selected
+                                ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 20,
+                                )
+                                : null,
                       ),
                     );
                   }),
@@ -612,16 +663,19 @@ class _AppearanceSection extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                        child: Text('隐藏金额',
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface))),
+                      child: Text(
+                        '隐藏金额',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
                     Switch(
                       value: settings.hideAmount,
-                      onChanged: (v) => ref
-                          .read(appSettingsProvider.notifier)
-                          .updateHideAmount(v),
+                      onChanged:
+                          (v) => ref
+                              .read(appSettingsProvider.notifier)
+                              .updateHideAmount(v),
                     ),
                   ],
                 ),
@@ -629,19 +683,19 @@ class _AppearanceSection extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                        child: Text('深色模式',
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface))),
+                      child: Text(
+                        '深色模式',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
                     Switch(
                       value: themeMode == 'dark',
                       onChanged: (v) {
                         final mode = v ? 'dark' : 'light';
                         ref.read(themeModeProvider.notifier).state = mode;
-                        ref
-                            .read(settingsRepositoryProvider)
-                            .setThemeMode(mode);
+                        ref.read(settingsRepositoryProvider).setThemeMode(mode);
                       },
                     ),
                   ],
@@ -696,18 +750,20 @@ class _TargetSectionState extends ConsumerState<_TargetSection> {
                   label: '每日目标车数',
                   controller: _dailyCtrl,
                   keyboardType: TextInputType.number,
-                  onChanged: (v) => ref
-                      .read(appSettingsProvider.notifier)
-                      .updateDailyTarget(int.tryParse(v) ?? 0),
+                  onChanged:
+                      (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateDailyTarget(int.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 12),
                 _SettingsTextField(
                   label: '每月目标车数',
                   controller: _monthlyCtrl,
                   keyboardType: TextInputType.number,
-                  onChanged: (v) => ref
-                      .read(appSettingsProvider.notifier)
-                      .updateMonthlyTarget(int.tryParse(v) ?? 0),
+                  onChanged:
+                      (v) => ref
+                          .read(appSettingsProvider.notifier)
+                          .updateMonthlyTarget(int.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -715,9 +771,9 @@ class _TargetSectionState extends ConsumerState<_TargetSection> {
                   child: FilledButton(
                     onPressed: () {
                       ref.invalidate(selectedDateRecordProvider);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('目标设置已保存')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('目标设置已保存')));
                     },
                     child: const Text('保存目标设置'),
                   ),
@@ -756,20 +812,21 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   Future<bool> _confirm(String title, String content) async {
     final r = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+      builder:
+          (_) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('确定'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
     );
     return r ?? false;
   }
@@ -801,123 +858,139 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                 _BackupButton(
                   label: '导出 JSON 备份',
                   loading: _busy,
-                  onPressed: () => _run(() async {
-                    final repo = ref.read(recordRepositoryProvider);
-                    final srepo = ref.read(settingsRepositoryProvider);
-                    final records = repo.getAllRecords();
-                    if (records.isEmpty) {
-                      if (mounted) _snack('暂无记录可导出');
-                      return;
-                    }
-                    final backup = FullBackup(
-                      records: records,
-                      jobPrices: srepo.getUnitPrices(),
-                      salarySettings: srepo.getSalarySettings(),
-                      appSettings: srepo.getAppSettings(),
-                      fixedWorkers: srepo.getFixedWorkers(),
-                      importTemplate: srepo.getImportTemplate(),
-                    );
-                    final json = RecordSerialization.toFullBackupJson(backup);
-                    await shareTextFile(json, '货场记账备份_$_stamp.json');
-                    if (mounted) {
-                      _snack('已导出 ${records.length} 条记录及全部配置');
-                    }
-                  }),
+                  onPressed:
+                      () => _run(() async {
+                        final repo = ref.read(recordRepositoryProvider);
+                        final srepo = ref.read(settingsRepositoryProvider);
+                        final records = repo.getAllRecords();
+                        if (records.isEmpty) {
+                          if (mounted) _snack('暂无记录可导出');
+                          return;
+                        }
+                        final backup = FullBackup(
+                          records: records,
+                          jobPrices: srepo.getUnitPrices(),
+                          salarySettings: srepo.getSalarySettings(),
+                          appSettings: srepo.getAppSettings(),
+                          fixedWorkers: srepo.getFixedWorkers(),
+                          importTemplate: srepo.getImportTemplate(),
+                        );
+                        final json = RecordSerialization.toFullBackupJson(
+                          backup,
+                        );
+                        await shareTextFile(json, '货场记账备份_$_stamp.json');
+                        if (mounted) {
+                          _snack('已导出 ${records.length} 条记录及全部配置');
+                        }
+                      }),
                 ),
                 _BackupButton(
                   label: '从 JSON 恢复',
                   loading: _busy,
-                  onPressed: () => _run(() async {
-                    final picked = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ['json'],
-                    );
-                    final path = picked?.files.single.path;
-                    if (path == null) return;
-                    final content = await File(path).readAsString();
-                    final backup = RecordSerialization.parseFullBackup(content);
-                    if (backup.records.isEmpty && !backup.hasSettings) {
-                      if (mounted) _snack('文件中没有有效数据');
-                      return;
-                    }
-                    final ok = await _confirm(
-                      '恢复备份',
-                      '将用 ${backup.records.length} 条记录覆盖当前全部数据，'
-                      '并恢复单价/工资构成/设置等全部配置，确定继续？',
-                    );
-                    if (!ok) return;
-                    final repo = ref.read(recordRepositoryProvider);
-                    final srepo = ref.read(settingsRepositoryProvider);
-                    await repo.replaceAllRecords(backup.records);
-                    if (backup.jobPrices != null) {
-                      await srepo.replaceAllPrices(backup.jobPrices!);
-                    }
-                    if (backup.salarySettings != null) {
-                      await srepo.saveSalarySettings(backup.salarySettings!);
-                    }
-                    if (backup.appSettings != null) {
-                      await srepo.saveAppSettings(backup.appSettings!);
-                    }
-                    if (backup.fixedWorkers != null) {
-                      await srepo.setFixedWorkers(backup.fixedWorkers!);
-                    }
-                    if (backup.importTemplate != null) {
-                      await srepo.saveImportTemplate(backup.importTemplate!);
-                    }
-                    ref.invalidate(historyRecordsProvider);
-                    ref.invalidate(lastRecordProvider);
-                    ref.invalidate(last7DaysSummaryProvider);
-                    ref.invalidate(monthlyStatsProvider);
-                    ref.invalidate(dayRecordsProvider);
-                    ref.invalidate(selectedDateRecordProvider);
-                    ref.invalidate(unitPricesProvider);
-                    ref.invalidate(salarySettingsProvider);
-                    ref.invalidate(appSettingsProvider);
-                    ref.invalidate(themeModeProvider);
-                    if (mounted) {
-                      _snack('已恢复 ${backup.records.length} 条记录及全部配置');
-                    }
-                  }),
+                  onPressed:
+                      () => _run(() async {
+                        final picked = await FilePicker.platform.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: ['json'],
+                        );
+                        final path = picked?.files.single.path;
+                        if (path == null) return;
+                        final content = await File(path).readAsString();
+                        final backup = RecordSerialization.parseFullBackup(
+                          content,
+                        );
+                        if (backup.records.isEmpty && !backup.hasSettings) {
+                          if (mounted) _snack('文件中没有有效数据');
+                          return;
+                        }
+                        final ok = await _confirm(
+                          '恢复备份',
+                          '将用 ${backup.records.length} 条记录覆盖当前全部数据，'
+                              '并恢复单价/工资构成/设置等全部配置，确定继续？',
+                        );
+                        if (!ok) return;
+                        final repo = ref.read(recordRepositoryProvider);
+                        final srepo = ref.read(settingsRepositoryProvider);
+                        await repo.replaceAllRecords(backup.records);
+                        if (backup.jobPrices != null) {
+                          await srepo.replaceAllPrices(backup.jobPrices!);
+                        }
+                        if (backup.salarySettings != null) {
+                          await srepo.saveSalarySettings(
+                            backup.salarySettings!,
+                          );
+                        }
+                        if (backup.appSettings != null) {
+                          await srepo.saveAppSettings(backup.appSettings!);
+                        }
+                        if (backup.fixedWorkers != null) {
+                          await srepo.setFixedWorkers(backup.fixedWorkers!);
+                        }
+                        if (backup.importTemplate != null) {
+                          await srepo.saveImportTemplate(
+                            backup.importTemplate!,
+                          );
+                        }
+                        ref.invalidate(historyRecordsProvider);
+                        ref.invalidate(lastRecordProvider);
+                        ref.invalidate(last7DaysSummaryProvider);
+                        ref.invalidate(monthlyStatsProvider);
+                        ref.invalidate(dayRecordsProvider);
+                        ref.invalidate(selectedDateRecordProvider);
+                        ref.invalidate(unitPricesProvider);
+                        ref.invalidate(salarySettingsProvider);
+                        ref.invalidate(appSettingsProvider);
+                        ref.invalidate(themeModeProvider);
+                        if (mounted) {
+                          _snack('已恢复 ${backup.records.length} 条记录及全部配置');
+                        }
+                      }),
                 ),
                 _BackupButton(
                   label: '恢复示例数据',
                   loading: _busy,
-                  onPressed: () => _run(() async {
-                    final ok = await _confirm(
-                      '恢复示例数据',
-                      '将写入 3 条示例记录（已存在的日期会被覆盖），确定？',
-                    );
-                    if (!ok) return;
-                    await ref.read(recordRepositoryProvider).seedSampleData();
-                    ref.invalidate(historyRecordsProvider);
-                    ref.invalidate(lastRecordProvider);
-                    ref.invalidate(last7DaysSummaryProvider);
-                    ref.invalidate(monthlyStatsProvider);
-                    ref.invalidate(dayRecordsProvider);
-                    ref.invalidate(selectedDateRecordProvider);
-                    if (mounted) _snack('已写入示例数据');
-                  }),
+                  onPressed:
+                      () => _run(() async {
+                        final ok = await _confirm(
+                          '恢复示例数据',
+                          '将写入 3 条示例记录（已存在的日期会被覆盖），确定？',
+                        );
+                        if (!ok) return;
+                        await ref
+                            .read(recordRepositoryProvider)
+                            .seedSampleData();
+                        ref.invalidate(historyRecordsProvider);
+                        ref.invalidate(lastRecordProvider);
+                        ref.invalidate(last7DaysSummaryProvider);
+                        ref.invalidate(monthlyStatsProvider);
+                        ref.invalidate(dayRecordsProvider);
+                        ref.invalidate(selectedDateRecordProvider);
+                        if (mounted) _snack('已写入示例数据');
+                      }),
                 ),
                 _BackupButton(
                   label: '清空全部数据',
                   foregroundColor: Theme.of(context).colorScheme.error,
                   loading: _busy,
-                  onPressed: () => _run(() async {
-                    final ok = await _confirm(
-                      '清空全部数据',
-                      '将删除所有记账记录，且不可恢复，确定？',
-                    );
-                    if (!ok) return;
-                    await ref.read(recordRepositoryProvider).clearAllRecords();
-                    // 刷新所有依赖记录数据的 Provider，确保首页/明细页/统计页均无残留
-                    ref.invalidate(historyRecordsProvider);
-                    ref.invalidate(lastRecordProvider);
-                    ref.invalidate(selectedDateRecordProvider);
-                    ref.invalidate(last7DaysSummaryProvider);
-                    ref.invalidate(monthlyStatsProvider);
-                    ref.invalidate(dayRecordsProvider);
-                    if (mounted) _snack('已清空全部数据');
-                  }),
+                  onPressed:
+                      () => _run(() async {
+                        final ok = await _confirm(
+                          '清空全部数据',
+                          '将删除所有记账记录，且不可恢复，确定？',
+                        );
+                        if (!ok) return;
+                        await ref
+                            .read(recordRepositoryProvider)
+                            .clearAllRecords();
+                        // 刷新所有依赖记录数据的 Provider，确保首页/明细页/统计页均无残留
+                        ref.invalidate(historyRecordsProvider);
+                        ref.invalidate(lastRecordProvider);
+                        ref.invalidate(selectedDateRecordProvider);
+                        ref.invalidate(last7DaysSummaryProvider);
+                        ref.invalidate(monthlyStatsProvider);
+                        ref.invalidate(dayRecordsProvider);
+                        if (mounted) _snack('已清空全部数据');
+                      }),
                 ),
               ],
             ),
@@ -951,13 +1024,14 @@ class _BackupButton extends StatelessWidget {
           foregroundColor: foregroundColor,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
-        child: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(label),
+        child:
+            loading
+                ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : Text(label),
       ),
     );
   }
@@ -981,9 +1055,7 @@ class _SettingsTextField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-      ),
+      decoration: InputDecoration(labelText: label),
       onChanged: onChanged,
     );
   }
@@ -1007,23 +1079,24 @@ class _NumberField extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                )),
+            child: Text(
+              label,
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
           ),
           SizedBox(
             width: 120,
             child: TextFormField(
               initialValue: value.toStringAsFixed(2),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              textAlign: TextAlign.right,
-              decoration: const InputDecoration(
-                filled: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
-              onChanged: (v) => onChanged(
-                  v.trim().isEmpty ? 0 : (double.tryParse(v) ?? value)),
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(filled: true),
+              onChanged:
+                  (v) => onChanged(
+                    v.trim().isEmpty ? 0 : (double.tryParse(v) ?? value),
+                  ),
             ),
           ),
         ],
