@@ -132,9 +132,8 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
                 jobType: jobType,
                 quantity: _jobQuantities[jobType] ?? 0,
                 unitPrice: unitPrices[jobType] ?? 0,
-                onChanged: (delta) => setState(() {
-                  _jobQuantities[jobType] =
-                      ((_jobQuantities[jobType] ?? 0) + delta).clamp(0, 9999);
+                onChanged: (value) => setState(() {
+                  _jobQuantities[jobType] = value.clamp(0, 9999);
                 }),
               )),
           const SizedBox(height: 12),

@@ -70,7 +70,13 @@ class HistoryPage extends ConsumerWidget {
                                   builder: (_) => EditRecordPage(record: r),
                                 ),
                               );
+                              // 编辑返回后刷新全部记录相关 Provider（含首页今日记账/统计），避免联动残留
                               ref.invalidate(historyRecordsProvider);
+                              ref.invalidate(last7DaysSummaryProvider);
+                              ref.invalidate(monthlyStatsProvider);
+                              ref.invalidate(lastRecordProvider);
+                              ref.invalidate(dayRecordsProvider);
+                              ref.invalidate(selectedDateRecordProvider);
                             },
                             onDelete: () async {
                               await ref
