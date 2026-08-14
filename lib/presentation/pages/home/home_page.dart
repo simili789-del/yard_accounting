@@ -118,9 +118,9 @@ class _HomeBody extends ConsumerWidget {
                 jobType: jobType,
                 quantity: record.jobQuantities[jobType] ?? 0,
                 unitPrice: unitPrices[jobType] ?? 0,
-                onChanged: (delta) => ref
+                onChanged: (value) => ref
                     .read(selectedDateRecordProvider.notifier)
-                    .updateJobQuantity(jobType, delta),
+                    .updateJobQuantity(jobType, value),
               )),
           if (advancedTypes.isNotEmpty)
             Theme(

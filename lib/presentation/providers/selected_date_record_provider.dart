@@ -119,13 +119,16 @@ class SelectedDateRecordNotifier
     _scheduleSave();
   }
 
-  void updateJobQuantity(String jobType, int delta) {
+  /// 直接设置某作业类型的车数（键盘输入/微调用），内部 clamp 到 [0, 9999]。
+  /// 与旧版的「增量」语义不同：此处传入的是「绝对值」。
+  void updateJobQuantity(String jobType, int value) {
     final current = state.value;
     if (current == null) return;
+    final v = value.clamp(0, 9999);
+    if ((current.jobQuantities[jobType] ?? 0) == v) return;
     _pushUndo();
     final newQuantities = Map<String, int>.from(current.jobQuantities);
-    newQuantities[jobType] =
-        ((newQuantities[jobType] ?? 0) + delta).clamp(0, 9999);
+    newQuantities[jobType] = v;
     state = AsyncData(current.copyWith(jobQuantities: newQuantities));
     _scheduleSave();
   }
