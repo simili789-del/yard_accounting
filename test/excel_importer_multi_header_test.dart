@@ -66,5 +66,25 @@ void main() {
     final sun = byName['孙同曦']!;
     expect(sun.single.boatName, '大周');
     expect(sun.single.quantities, containsPair('挖掘机加高', 96));
+    // 车号以浮点存储（119.0）应规整为整数文本「119」，去掉尾巴 .0
+    expect(sun.single.vehicleNo, '119');
+  });
+
+  test('船名列识别加宽：驳船/船次等别名也能识别为船名', () {
+    // 真实表格里队长的船名列写法五花八门（船名/船号/驳船/船次…），
+    // 解析器用「含船/驳」宽泛匹配，确保这些别名都能正确读出船名。
+    final result =
+        parseXlsx('test/fixtures/excavator_boat_alias.xlsx', sheetName: '挖掘机绩效');
+    expect(result.importable, isTrue);
+    final byName = <String, List<ImportedRow>>{};
+    for (final row in result.rows) {
+      byName.putIfAbsent(row.workerName, () => []).add(row);
+    }
+    // 首行直接带船名「大周」
+    expect(byName['孙同曦']!.single.boatName, '大周');
+    // 合并单元格：巩明帅行船名为空，应向上继承为「大周」
+    expect(byName['巩明帅']!.single.boatName, '大周');
+    // 另一艘船「中海顺和」
+    expect(byName['孙生']!.single.boatName, '中海顺和');
   });
 }

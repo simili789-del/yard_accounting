@@ -365,7 +365,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       final remark = remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null;
       result.add(ImportedRow(
         workerName: name,
-        vehicleNo: vehC != null ? (_text(rows[r][vehC]) ?? '') : '',
+        vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
         remark: remark,
         overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (bt != null && bt.isNotEmpty) ? bt : null,
@@ -383,7 +383,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       if (quantities.isEmpty) continue;
       result.add(ImportedRow(
         workerName: name,
-        vehicleNo: vehC != null ? (_text(rows[r][vehC]) ?? '') : '',
+        vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
         remark: remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null,
         overtime: overtimeC != null ? _text(rows[r][overtimeC]) : null,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
@@ -516,6 +516,21 @@ String? _text(dynamic cell) {
   final v = _raw(cell);
   if (v == null) return null;
   return v.toString().trim();
+}
+
+/// 车号（车牌号）规整：Excel 常以浮点存储整数车号（如 119.0），
+/// 直接 toString 会得到 "119.0" 这种带小数尾巴的串，需去掉。
+/// 规则：整数型数值 → 取整字符串（119.0 → 119）；保留字母与混合文本
+/// （如 "京A12345" 不受影响）；数值文本 "119.0" → "119"。
+String _formatVehicleNo(dynamic cell) {
+  final v = _raw(cell);
+  if (v == null) return '';
+  if (v is double) {
+    return v == v.roundToDouble() ? v.round().toString() : v.toString();
+  }
+  final s = v.toString().trim();
+  if (s.isEmpty) return '';
+  return s.replaceFirst(RegExp(r'\.0+$'), '');
 }
 
 int? _toInt(dynamic cell) {
@@ -772,7 +787,10 @@ _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
       remarkCol = c;
       continue;
     }
-    if (h.contains('船名') || h.contains('船号')) {
+    // 船名列：挖掘机、56道卸船等场景按船统计作业量。用「含『船』或『驳』」
+    // 宽泛匹配，兼容各队长五花八门的写法（船名/船号/船次/驳船/船驳…），
+    // 同时不会误命中铲车表的『货场装车/火车装车』等列（货场类不含船/驳）。
+    if (h.contains('船') || h.contains('驳')) {
       boatCol = c;
       continue;
     }

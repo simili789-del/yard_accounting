@@ -481,6 +481,19 @@ class _WorkerList extends ConsumerWidget {
               // 导入时自动派生的备注标记（叉/值/加班），预览里先让用户看到。
               final autoTags =
                   deriveRemarkTags(row.remark, overtime: row.overtime);
+              final detail = [
+                if (showYardPerRow &&
+                    row.yard != null &&
+                    row.yard!.isNotEmpty)
+                  '货场 ${row.yard}',
+                if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
+                qty,
+                if (autoTags.isNotEmpty) '标记 ${autoTags.join('·')}',
+                if (dup) '同一人多船/多行，导入后按船分条、统计相加',
+                if (disabled) '非默认姓名（关闭上方开关可导入）',
+              ].where((s) => s.isNotEmpty).join('  ·  ');
+              final hasBoat =
+                  row.boatName != null && row.boatName!.isNotEmpty;
               return CheckboxListTile(
                 value: selected,
                 onChanged: disabled
@@ -489,20 +502,23 @@ class _WorkerList extends ConsumerWidget {
                         .read(importProvider.notifier)
                         .toggleWorker(row.workerName, v ?? false),
                 title: Text(row.workerName),
-                subtitle: Text(
-                  [
-                    if (showYardPerRow &&
-                        row.yard != null &&
-                        row.yard!.isNotEmpty)
-                      '货场 ${row.yard}',
-                    if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
-                    if (row.boatName != null && row.boatName!.isNotEmpty)
-                      '船名 ${row.boatName}',
-                    qty,
-                    if (autoTags.isNotEmpty) '标记 ${autoTags.join('·')}',
-                    if (dup) '同一人多船/多行，导入后按船分条、统计相加',
-                    if (disabled) '非默认姓名（关闭上方开关可导入）',
-                  ].where((s) => s.isNotEmpty).join('  ·  '),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (detail.isNotEmpty) Text(detail),
+                    if (hasBoat)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Chip(
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          label: Text('船名 ${row.boatName}'),
+                          avatar: const Icon(Icons.directions_boat, size: 16),
+                          backgroundColor:
+                              Theme.of(context).colorScheme.secondaryContainer,
+                        ),
+                      ),
+                  ],
                 ),
               );
             }),
