@@ -358,6 +358,7 @@ class _AddJobTypeCard extends ConsumerStatefulWidget {
 class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
+  bool _expanded = false;
 
   @override
   void dispose() {
@@ -366,65 +367,93 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
     super.dispose();
   }
 
+  void _add() {
+    final name = _nameCtrl.text.trim();
+    final price = double.tryParse(_priceCtrl.text) ?? 0;
+    if (name.isNotEmpty) {
+      ref.read(unitPricesProvider.notifier).add(name, price);
+      _nameCtrl.clear();
+      _priceCtrl.clear();
+      setState(() => _expanded = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('新增作业类型',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
-                )),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '类型名称',
-                      filled: true,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 默认收起的入口，点开才显示表单，避免占用过多竖向空间
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.add_circle_outline, color: scheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('新增作业类型',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onSurface,
+                        )),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _priceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '单价',
-                      filled: true,
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    color: scheme.onSurfaceVariant,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () {
-                  final name = _nameCtrl.text.trim();
-                  final price = double.tryParse(_priceCtrl.text) ?? 0;
-                  if (name.isNotEmpty) {
-                    ref.read(unitPricesProvider.notifier).add(name, price);
-                    _nameCtrl.clear();
-                    _priceCtrl.clear();
-                  }
-                },
-                child: const Text('添加类型'),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _nameCtrl,
+                          decoration: const InputDecoration(
+                            labelText: '类型名称',
+                            filled: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _priceCtrl,
+                          decoration: const InputDecoration(
+                            labelText: '单价',
+                            filled: true,
+                          ),
+                          keyboardType:
+                              const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _add,
+                      child: const Text('添加类型'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
