@@ -16,13 +16,13 @@ void main() {
         workerName: '张三',
         vehicleNo: '京A1',
         shift: ShiftType.day,
-        jobQuantities: {'货场装车': 10, '货场倒货': 5},
+        jobQuantities: {'货场装车': 10, '外倒装车': 5},
         remark: '测试',
       ),
     ];
     final backup = FullBackup(
       records: records,
-      jobPrices: {'货场装车': 1.2, '货场倒货': 1.8, '神华装车': 1.5},
+      jobPrices: {'货场装车': 1.2, '外倒装车': 1.8, '神华装车': 1.5},
       salarySettings: SalarySettings(
         baseSalary: 3000,
         mealAllowance: 300,
@@ -66,7 +66,7 @@ void main() {
       expect(parsed.records.first.workerName, '张三');
       expect(parsed.records.first.jobQuantities['货场装车'], 10);
       expect(parsed.jobPrices,
-          equals({'货场装车': 1.2, '货场倒货': 1.8, '神华装车': 1.5}));
+          equals({'货场装车': 1.2, '外倒装车': 1.8, '神华装车': 1.5}));
       expect(parsed.salarySettings!.baseSalary, 3000);
       expect(parsed.salarySettings!.seniorityBonus, 50);
       expect(parsed.appSettings!.yardName, '测试货场');

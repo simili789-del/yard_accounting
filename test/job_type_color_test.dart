@@ -7,7 +7,7 @@ void main() {
     test('预定义作业类型颜色保持不变（UI 稳定）', () {
       expect(DefaultJobTypes.colorOf('货场装车'), Colors.blue);
       expect(DefaultJobTypes.colorOf('货场归剁'), Colors.purple);
-      expect(DefaultJobTypes.colorOf('货场倒货'), Colors.orange);
+      expect(DefaultJobTypes.colorOf('外倒装车'), Colors.orange);
       expect(DefaultJobTypes.colorOf('内倒装车'), Colors.red);
       expect(DefaultJobTypes.colorOf('内倒归垛'), Colors.green);
       expect(DefaultJobTypes.colorOf('火车装车'), Colors.brown);

@@ -621,12 +621,12 @@ DateTime? _parseDateCell(dynamic cell) {
 ///   归垛 / 归剁 / 货场归剁 / 货场归垛 → 货场归剁
 ///   内倒归剁 / 内倒归垛 → 内倒归垛
 ///   汽出 / 汽提 / 装车 / 车数 / 汽提装车 / 货场装车 → 货场装车
-///   外倒装车 / 倒货 / 外倒倒货 / 倒货装车 → 货场倒货
+///   外倒装车 / 倒货 / 外倒倒货 / 倒货装车 → 外倒装车
 ///   内倒 / 内倒装车（含「端货」后缀） → 内倒装车
 ///   神华装车 → 神华装车（独立作业类型，不并入货场装车）
 ///   神华归垛 / 神华归剁 → 神华归垛（独立作业类型，不并入货场归剁）
 ///   封垛 / 封跺（米） → 封垛（挖掘机作业类型，米数即车数，按车算钱）
-/// 价格歧义消解：单纯「装车」若单价 ≈ 1.8 则视为「货场倒货」（1.2 则为「货场装车」）。
+/// 价格歧义消解：单纯「装车」若单价 ≈ 1.8 则视为「外倒装车」（1.2 则为「货场装车」）。
 /// 预处理：先剥离结尾的价格后缀（「(1.8)」「1.8元」「/1.8」「，端货1.8元」等），
 /// 再做字面归一，避免价格写法干扰匹配。
 String _canonicalJobType(String name, {double? price}) {
@@ -644,9 +644,9 @@ String _canonicalJobType(String name, {double? price}) {
   core = core.trim();
 
   // 价格歧义消解：单纯「装车」根据单价区分
-  // 1.8 元的「装车」= 货场倒货；1.2 元（或无价）的「装车」= 货场装车
+  // 1.8 元的「装车」= 外倒装车；1.2 元（或无价）的「装车」= 货场装车
   if (core == '装车' && price != null && (price - 1.8).abs() < 0.01) {
-    return '货场倒货';
+    return '外倒装车';
   }
 
   // 字面归一
@@ -671,7 +671,7 @@ String _canonicalJobType(String name, {double? price}) {
     case '倒货装车':
     case '外倒倒货':
     case '货场倒货':
-      return '货场倒货';
+      return '外倒装车';
     case '内倒':
     case '内倒装车':
       return '内倒装车';
@@ -695,7 +695,7 @@ String _canonicalJobType(String name, {double? price}) {
     return '货场归剁';
   }
   if (core.contains('汽提') || core.contains('汽出')) return '货场装车';
-  if (core.contains('倒货') || core.contains('外倒')) return '货场倒货';
+  if (core.contains('倒货') || core.contains('外倒')) return '外倒装车';
   if (core == '内倒' || core.contains('内倒装车')) return '内倒装车';
   return core;
 }

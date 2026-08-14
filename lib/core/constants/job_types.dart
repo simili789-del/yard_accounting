@@ -7,7 +7,7 @@ class DefaultJobTypes {
   static const List<String> types = [
     '货场装车',
     '货场归剁',
-    '货场倒货',
+    '外倒装车',
     '内倒装车',
     '内倒归垛',
     '火车装车',
@@ -20,7 +20,7 @@ class DefaultJobTypes {
   static const Map<String, double> defaultPrices = {
     '货场装车': 1.2,
     '货场归剁': 1.2,
-    '货场倒货': 1.8,
+    '外倒装车': 1.8,
     '内倒装车': 1.8,
     '内倒归垛': 1.2,
     '火车装车': 5.0,
@@ -47,7 +47,7 @@ class DefaultJobTypes {
   static const Map<String, Color> colors = {
     '货场装车': Colors.blue,
     '货场归剁': Colors.purple,
-    '货场倒货': Colors.orange,
+    '外倒装车': Colors.orange,
     '内倒装车': Colors.red,
     '内倒归垛': Colors.green,
     '火车装车': Colors.brown,

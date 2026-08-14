@@ -29,7 +29,7 @@ void main() {
       r.quantities.forEach((k, v) => dongAll[k] = (dongAll[k] ?? 0) + v);
     }
     expect(dongAll, containsPair('货场装车', 2));
-    expect(dongAll, containsPair('货场倒货', 16));
+    expect(dongAll, containsPair('外倒装车', 16));
     expect(dongAll, containsPair('火车装车', 16));
 
     // 陈登国：上半无车数（不产生记录），仅下半 {火车装车:1, 神华归垛:50}
@@ -49,7 +49,7 @@ void main() {
         reason: '神华装车独立后，货场装车合计不应被污染');
     expect(result.sheetTotals!['货场归剁'], 648,
         reason: '神华归垛独立后，货场归剁合计不应被污染');
-    expect(result.sheetTotals!['货场倒货'], 191);
+    expect(result.sheetTotals!['外倒装车'], 191);
     expect(result.sheetTotals!['火车装车'], 105);
     // 实际映射正确性由「陈登国」记录验证（神华归垛:50，见上方测试），
     // 以及 test/fixtures/job_type_mapping.xlsx 的专项映射测试。
