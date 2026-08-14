@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/job_types.dart';
 import '../../../domain/entities/work_record.dart';
+import '../../providers/app_settings_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
@@ -57,12 +58,13 @@ class _HomeBody extends ConsumerWidget {
         ? unitPrices.keys.toList()
         : DefaultJobTypes.types;
     // 常用作业类型常驻显示；非常用类型（火车装车/神华装车/神华归垛/挖掘机加高/封垛）
-    // 收进「其他作业类型」折叠区，默认收起，保持首页清爽。
+    // 仅当已解锁（导入命中或用户手动勾选）时才显示，未解锁则彻底隐藏，保持首页清爽。
     final regularTypes = jobTypes
         .where((t) => !DefaultJobTypes.advancedJobTypes.contains(t))
         .toList();
-    final advancedTypes = jobTypes
-        .where((t) => DefaultJobTypes.advancedJobTypes.contains(t))
+    final revealed = ref.watch(appSettingsProvider).revealedAdvancedTypes.toSet();
+    final advancedTypes = DefaultJobTypes.advancedJobTypes
+        .where((t) => revealed.contains(t))
         .toList();
     final selectedDate = ref.watch(selectedDateProvider);
 
@@ -141,6 +143,13 @@ class _HomeBody extends ConsumerWidget {
                     .toList(),
               ),
             ),
+          Center(
+            child: TextButton.icon(
+              icon: const Icon(Icons.add_circle_outline, size: 18),
+              label: const Text('管理作业类型'),
+              onPressed: () => _showAdvancedTypeManager(context, ref),
+            ),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -164,6 +173,48 @@ class _HomeBody extends ConsumerWidget {
           const _LastWorkDetail(),
         ],
       ),
+    );
+  }
+
+  /// 弹出「管理作业类型」对话框：列出全部非常用类型，已解锁的默认勾选；
+  /// 勾选即显示、取消即隐藏（手动入口，避免「只认导入」太死板）。
+  void _showAdvancedTypeManager(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(appSettingsProvider.notifier);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final current =
+                ref.read(appSettingsProvider).revealedAdvancedTypes.toSet();
+            return AlertDialog(
+              title: const Text('管理作业类型'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: DefaultJobTypes.advancedJobTypes.map((type) {
+                    final checked = current.contains(type);
+                    return CheckboxListTile(
+                      title: Text(type),
+                      value: checked,
+                      onChanged: (v) {
+                        notifier.setAdvancedTypeVisible(type, v ?? false);
+                        setState(() {});
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('完成'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

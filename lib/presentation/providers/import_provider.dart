@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/job_types.dart';
 import '../../data/repositories/excel_importer.dart';
 import '../../data/repositories/record_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../domain/entities/work_record.dart';
 import '../../domain/models/imported_row.dart';
+import '../providers/app_settings_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/repository_providers.dart';
 import '../providers/selected_date_record_provider.dart';
@@ -204,6 +206,16 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     for (final col in result.jobColumns) {
       final price = col.price ?? current[col.name] ?? 1.0;
       notifier.add(col.name, price);
+    }
+
+    // 1.1) 导入解锁：本次表格出现的非常用作业类型自动加入已解锁集合，
+    //      让首页「其他作业类型」折叠区按类别精确显示（只显导入用到的）。
+    final hitAdvanced = result.jobColumns
+        .where((c) => DefaultJobTypes.advancedJobTypes.contains(c.name))
+        .map((c) => c.name)
+        .toSet();
+    if (hitAdvanced.isNotEmpty) {
+      _ref.read(appSettingsProvider.notifier).revealAdvancedTypes(hitAdvanced);
     }
 
     // 2) 构造并写入记录

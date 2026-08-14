@@ -31,6 +31,11 @@ class AppSettings extends HiveObject {
   @HiveField(7, defaultValue: <String>[])
   final List<String> boatNames;
 
+  /// 已解锁显示的非常用作业类型（其他作业类型）。默认空 → 首页不显示折叠区；
+  /// 导入含某非常用类型或用户在「管理作业类型」里手动勾选时加入，持久化。
+  @HiveField(8, defaultValue: <String>[])
+  final List<String> revealedAdvancedTypes;
+
   AppSettings({
     this.defaultWorkerName = '',
     this.defaultVehicleNo = '',
@@ -40,6 +45,7 @@ class AppSettings extends HiveObject {
     this.primaryColorIndex = 0,
     this.hideAmount = false,
     this.boatNames = const [],
+    this.revealedAdvancedTypes = const [],
   });
 
   AppSettings copyWith({
@@ -51,6 +57,7 @@ class AppSettings extends HiveObject {
     int? primaryColorIndex,
     bool? hideAmount,
     List<String>? boatNames,
+    List<String>? revealedAdvancedTypes,
   }) {
     return AppSettings(
       defaultWorkerName: defaultWorkerName ?? this.defaultWorkerName,
@@ -61,6 +68,8 @@ class AppSettings extends HiveObject {
       primaryColorIndex: primaryColorIndex ?? this.primaryColorIndex,
       hideAmount: hideAmount ?? this.hideAmount,
       boatNames: boatNames ?? this.boatNames,
+      revealedAdvancedTypes:
+          revealedAdvancedTypes ?? this.revealedAdvancedTypes,
     );
   }
 }

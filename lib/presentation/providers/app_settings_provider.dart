@@ -43,4 +43,21 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
 
   void updateBoatNames(List<String> value) =>
       update(state.copyWith(boatNames: value));
+
+  /// 导入时调用：把命中的非常用类型并入已解锁集合（并集，不丢已有）。
+  void revealAdvancedTypes(Set<String> types) {
+    final merged = {...state.revealedAdvancedTypes, ...types};
+    update(state.copyWith(revealedAdvancedTypes: merged.toList()));
+  }
+
+  /// 手动入口调用：勾选=显示，取消=隐藏。
+  void setAdvancedTypeVisible(String type, bool visible) {
+    final set = {...state.revealedAdvancedTypes};
+    if (visible) {
+      set.add(type);
+    } else {
+      set.remove(type);
+    }
+    update(state.copyWith(revealedAdvancedTypes: set.toList()));
+  }
 }
