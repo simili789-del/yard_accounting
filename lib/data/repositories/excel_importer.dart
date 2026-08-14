@@ -18,6 +18,9 @@ class _HeaderInfo {
   final int? nameCol;
   final int? vehCol;
   final int? remarkCol;
+  /// 备注兜底列：当表头「备注」列右侧紧跟一个无表头的空列、
+  /// 且用户常把备注填在那一格时（备注列错位一格），此列作为备注的兜底来源。
+  final int? remarkFallbackCol;
   final int? boatCol;
   final int? dateCol;
   final int? shiftCol;
@@ -32,7 +35,7 @@ class _HeaderInfo {
 
   int get maxCol {
     var m = nameCol ?? -1;
-    for (final c in [vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol, yardCol]) {
+    for (final c in [vehCol, remarkCol, boatCol, dateCol, shiftCol, overtimeCol, yardCol, remarkFallbackCol]) {
       if (c != null && c > m) m = c;
     }
     for (final c in jobCols.keys) {
@@ -45,6 +48,7 @@ class _HeaderInfo {
     required this.nameCol,
     this.vehCol,
     this.remarkCol,
+    this.remarkFallbackCol,
     this.boatCol,
     this.dateCol,
     this.shiftCol,
@@ -361,7 +365,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       }
       if (quantities.isEmpty) continue;
       // 船名写入 boatName 字段（按船分条记录，统计时自动相加），备注只保留原始备注。
-      final remark = remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null;
+      final remark = _readRemark(rows[r], remarkC, header.remarkFallbackCol);
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
@@ -382,7 +386,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
-        remark: remarkC != null ? _cleanRemark(_text(rows[r][remarkC])) : null,
+        remark: _readRemark(rows[r], remarkC, header.remarkFallbackCol),
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
         yard: rowYard,
@@ -709,6 +713,27 @@ String? _cleanRemark(String? raw) {
   return raw;
 }
 
+/// 读取某行备注：优先取对齐的备注列 [remarkCol]；若该列为空，
+/// 且 [fallbackCol]（备注列右侧紧邻的无表头空列）有非空文本，
+/// 则回退取 [fallbackCol] 作为备注，解决「备注填在备注列右边一格」
+/// 导致备注整列丢失的问题（如铲车绩效表把「加/叉车」写在备注列右侧）。
+/// [fallbackCol] 仅接受非纯数字的文本，避免把错位空列里的杂散数字当备注。
+String? _readRemark(List<dynamic> row, int? remarkCol, int? fallbackCol) {
+  String? pick(int? c) {
+    if (c == null || c >= row.length) return null;
+    final t = _text(row[c]) ?? '';
+    return t.isEmpty ? null : t;
+  }
+  final primary = pick(remarkCol);
+  if (primary != null) return _cleanRemark(primary);
+  final fb = pick(fallbackCol);
+  if (fb != null && !_isPureNumber(fb)) return _cleanRemark(fb);
+  return null;
+}
+
+/// 判断字符串是否为纯数字（整数或小数），用于备注兜底列过滤杂散数字。
+bool _isPureNumber(String s) => RegExp(r'^-?\d+(\.\d+)?$').hasMatch(s.trim());
+
 /// 清洗列名：剥离结尾的「(分隔符) 数字 元?」，提取单价。
 /// 兼容多种写法：
 /// 「外倒装车1.8元」→ 外倒装车 + 1.8；
@@ -796,10 +821,21 @@ _HeaderInfo _analyzeHeader(List<dynamic> headerCells) {
     jobCols[c] = _cleanColumn(h);
     rawJobCols[c] = h;
   }
+
+  // 备注兜底列：若表头「备注」列右侧紧跟一个无表头的空列，
+  // 说明该列常被当作备注的实际填写位置（备注列错位一格）。
+  // 行解析时优先取对齐的备注列，取空则回退到此列（见 _readRemark）。
+  int? remarkFallbackCol;
+  if (remarkCol != null && remarkCol + 1 < headerCells.length) {
+    final rightHeader = _text(headerCells[remarkCol + 1]) ?? '';
+    if (rightHeader.isEmpty) remarkFallbackCol = remarkCol + 1;
+  }
+
   return _HeaderInfo(
     nameCol: nameCol,
     vehCol: vehCol,
     remarkCol: remarkCol,
+    remarkFallbackCol: remarkFallbackCol,
     boatCol: boatCol,
     dateCol: dateCol,
     shiftCol: shiftCol,
