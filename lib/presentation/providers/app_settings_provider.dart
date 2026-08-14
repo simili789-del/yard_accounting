@@ -60,4 +60,15 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
     }
     update(state.copyWith(revealedAdvancedTypes: set.toList()));
   }
+
+  /// 普通/手动添加作业类型的显隐：hidden=true 则从首页常规区隐藏，false 恢复显示。
+  void setJobTypeHidden(String type, bool hidden) {
+    final set = {...state.hiddenJobTypes};
+    if (hidden) {
+      set.add(type);
+    } else {
+      set.remove(type);
+    }
+    update(state.copyWith(hiddenJobTypes: set.toList()));
+  }
 }

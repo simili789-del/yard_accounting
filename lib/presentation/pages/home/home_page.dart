@@ -59,10 +59,13 @@ class _HomeBody extends ConsumerWidget {
         : DefaultJobTypes.types;
     // 常用作业类型常驻显示；非常用类型（火车装车/神华装车/神华归垛/挖掘机加高/封垛）
     // 仅当已解锁（导入命中或用户手动勾选）时才显示，未解锁则彻底隐藏，保持首页清爽。
+    final settings = ref.watch(appSettingsProvider);
+    final hidden = settings.hiddenJobTypes.toSet();
     final regularTypes = jobTypes
         .where((t) => !DefaultJobTypes.advancedJobTypes.contains(t))
+        .where((t) => !hidden.contains(t))
         .toList();
-    final revealed = ref.watch(appSettingsProvider).revealedAdvancedTypes.toSet();
+    final revealed = settings.revealedAdvancedTypes.toSet();
     final advancedTypes = DefaultJobTypes.advancedJobTypes
         .where((t) => revealed.contains(t))
         .toList();
@@ -176,8 +179,9 @@ class _HomeBody extends ConsumerWidget {
     );
   }
 
-  /// 弹出「管理作业类型」对话框：列出全部非常用类型，已解锁的默认勾选；
-  /// 勾选即显示、取消即隐藏（手动入口，避免「只认导入」太死板）。
+  /// 弹出「管理作业类型」对话框：列出全部作业类型，勾选=在首页显示、取消=隐藏。
+  /// 固定高级类型（其他作业类型）用 revealedAdvancedTypes 控制，其余手写/导入类型用
+  /// hiddenJobTypes 控制，二者在 UI 上统一为「勾选即显示」。
   void _showAdvancedTypeManager(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(appSettingsProvider.notifier);
     showDialog<void>(
@@ -185,20 +189,38 @@ class _HomeBody extends ConsumerWidget {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setState) {
-            final current =
-                ref.read(appSettingsProvider).revealedAdvancedTypes.toSet();
+            final settings = ref.read(appSettingsProvider);
+            final revealed = settings.revealedAdvancedTypes.toSet();
+            final hidden = settings.hiddenJobTypes.toSet();
+            final unitPrices = ref.read(unitPricesProvider);
+            // 全部类型：先固定高级类型，再其余（保持已有顺序）。
+            final allTypes = [
+              ...DefaultJobTypes.advancedJobTypes,
+              ...unitPrices.keys
+                  .where((t) => !DefaultJobTypes.advancedJobTypes.contains(t)),
+            ];
             return AlertDialog(
               title: const Text('管理作业类型'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: DefaultJobTypes.advancedJobTypes.map((type) {
-                    final checked = current.contains(type);
+                  children: allTypes.map((type) {
+                    final isAdvanced =
+                        DefaultJobTypes.advancedJobTypes.contains(type);
+                    final checked = isAdvanced
+                        ? revealed.contains(type)
+                        : !hidden.contains(type);
                     return CheckboxListTile(
                       title: Text(type),
+                      subtitle:
+                          isAdvanced ? const Text('其他作业类型') : null,
                       value: checked,
                       onChanged: (v) {
-                        notifier.setAdvancedTypeVisible(type, v ?? false);
+                        if (isAdvanced) {
+                          notifier.setAdvancedTypeVisible(type, v ?? false);
+                        } else {
+                          notifier.setJobTypeHidden(type, !(v ?? false));
+                        }
                         setState(() {});
                       },
                     );

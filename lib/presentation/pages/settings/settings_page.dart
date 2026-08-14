@@ -402,6 +402,11 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
     final price = double.tryParse(_priceCtrl.text) ?? 0;
     if (name.isNotEmpty) {
       ref.read(unitPricesProvider.notifier).add(name, price);
+      // 手动添加的类型若命中「其他作业类型」（固定高级类型），自动解锁显示，
+      // 避免「设置页加了、首页却看不到」的脱节。
+      if (DefaultJobTypes.advancedJobTypes.contains(name)) {
+        ref.read(appSettingsProvider.notifier).revealAdvancedTypes({name});
+      }
       _nameCtrl.clear();
       _priceCtrl.clear();
       setState(() => _expanded = false);
