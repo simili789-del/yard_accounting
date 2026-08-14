@@ -637,8 +637,9 @@ String _canonicalJobType(String name, {double? price}) {
   var core = name;
   // 去掉括号及内容：仅当括号在末尾且内含数字时
   core = core.replaceAll(RegExp(r'[（(]\s*\d+(?:\.\d+)?\s*元?\s*[)）]\s*$'), '');
-  // 去掉结尾「数字 元?」
-  core = core.replaceAll(RegExp(r'[，,\s/]\s*\d+(?:\.\d+)?\s*元?\s*$'), '');
+  // 去掉结尾「数字 元?」：数字前可有 逗号/空格/斜杠 分隔（如「内倒/1.8」），
+  // 也可直接连写在汉字后（如「内倒1.8」「内倒1.8元」），避免名字+数字被当成新类型。
+  core = core.replaceAll(RegExp(r'(?:[，,\s/]|(?<=\D))\s*\d+(?:\.\d+)?\s*元?\s*$'), '');
   // 去掉结尾「，端货」「/端货」等子类型修饰
   core = core.replaceAll(RegExp(r'[，,\s/]\s*端货\s*$'), '');
   core = core.trim();
