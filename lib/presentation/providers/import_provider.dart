@@ -86,6 +86,17 @@ final importProvider =
 
 class ImportNotifier extends StateNotifier<ImportUiState> {
   final Ref _ref;
+
+  /// computedTotals / mismatches 缓存：UI 每帧 rebuild 会重复读取这两个 getter，
+  /// 每访问都要遍历 result.rows 求和（O(n)）。这里在 result 或勾选集合引用变化时才重算，
+  /// 否则直接返回缓存值（引用比较为 O(1)），避免每帧重复 O(n)。
+  Map<String, int>? _cachedTotals;
+  ExcelParseResult? _cachedTotalsResult;
+  Set<String>? _cachedTotalsSelection;
+  List<String>? _cachedMismatches;
+  ExcelParseResult? _cachedMismatchesResult;
+  Set<String>? _cachedMismatchesSelection;
+
   ImportNotifier(this._ref) : super(ImportUiState());
 
   /// 归一化辅助：去除所有空白（含零宽/不可见字符），用于稳健匹配。
@@ -165,30 +176,49 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
   void setShift(ShiftType s) => state = state.copyWith(shift: s);
   void setEnforceFixed(bool v) => state = state.copyWith(enforceFixed: v);
 
-  /// 已勾选人员各作业类型车数求和（用于合计对账）。
+  /// 已勾选人员各作业类型车数求和（用于合计对账）。结果按 result + 勾选集合引用缓存。
   Map<String, int> get computedTotals {
-    final totals = <String, int>{};
     final result = state.result;
-    if (result == null) return totals;
+    final sel = state.selectedWorkers;
+    if (result == null) return const {};
+    // 输入（result 引用、勾选集合引用）未变则直接返回缓存，避免每帧重复求和
+    if (_cachedTotals != null &&
+        identical(_cachedTotalsResult, result) &&
+        identical(_cachedTotalsSelection, sel)) {
+      return _cachedTotals!;
+    }
+    final totals = <String, int>{};
     for (final row in result.rows) {
-      if (!state.selectedWorkers.contains(row.workerName)) continue;
+      if (!sel.contains(row.workerName)) continue;
       for (final e in row.quantities.entries) {
         totals[e.key] = (totals[e.key] ?? 0) + e.value;
       }
     }
+    _cachedTotals = totals;
+    _cachedTotalsResult = result;
+    _cachedTotalsSelection = sel;
     return totals;
   }
 
-  /// 与表格合计行不一致的作业类型列名（差异=漏录/错录）。
+  /// 与表格合计行不一致的作业类型列名（差异=漏录/错录）。同样按缓存返回。
   List<String> get mismatches {
     final result = state.result;
-    if (result?.sheetTotals == null) return [];
+    final sel = state.selectedWorkers;
+    if (result?.sheetTotals == null) return const [];
+    if (_cachedMismatches != null &&
+        identical(_cachedMismatchesResult, result) &&
+        identical(_cachedMismatchesSelection, sel)) {
+      return _cachedMismatches!;
+    }
     final computed = computedTotals;
     final miss = <String>[];
     result!.sheetTotals!.forEach((col, tableTotal) {
       final got = computed[col] ?? 0;
       if (got != tableTotal) miss.add(col);
     });
+    _cachedMismatches = miss;
+    _cachedMismatchesResult = result;
+    _cachedMismatchesSelection = sel;
     return miss;
   }
 
@@ -205,7 +235,11 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final current = Map<String, double>.from(_ref.read(unitPricesProvider));
     for (final col in result.jobColumns) {
       final price = col.price ?? current[col.name] ?? 1.0;
-      notifier.add(col.name, price);
+      try {
+        await notifier.add(col.name, price);
+      } on Exception {
+        // 类型已存在属正常（重复导入）：保留用户已有的单价配置，忽略重复添加异常。
+      }
     }
 
     // 1.1) 导入解锁：本次表格出现的非常用作业类型自动加入已解锁集合，
@@ -232,9 +266,16 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
 
     // 待导入记录的（人+货场+班次）组合去重，按组合精准删除旧记录：
     // 只清掉同一货场同一班次的旧数据，绝不误删其他货场/班次（多表导入不丢数）。
+    // 班次逐行优先：本行有解析出的 shift 用本行，否则回退整批 state.shift。
+    ShiftType resolveShift(ImportedRow row) {
+      final s = row.shift;
+      if (s == null) return state.shift;
+      return s == ShiftType.night.name ? ShiftType.night : ShiftType.day;
+    }
+
     final combos = <(String, String?, ShiftType)>{};
     for (final row in result.rows) {
-      if (keep(row)) combos.add((row.workerName, row.yard, state.shift));
+      if (keep(row)) combos.add((row.workerName, row.yard, resolveShift(row)));
     }
     for (final (name, yard, shift) in combos) {
       await repo.deleteImportedByWorker(date, name, yard: yard, shift: shift);
@@ -250,11 +291,11 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
       records.add(WorkRecord(
         // 带船名的挖掘机记录按船分条；铲车记录按 人+货场+班次 一条。
         id: RecordRepository.makeImportId(date, row.workerName,
-            yard: row.yard, shift: state.shift, boat: row.boatName),
+            yard: row.yard, shift: resolveShift(row), boat: row.boatName),
         date: DateTime(date.year, date.month, date.day),
         workerName: row.workerName,
         vehicleNo: row.vehicleNo,
-        shift: state.shift,
+        shift: resolveShift(row),
         jobQuantities: Map<String, int>.from(row.quantities),
         remark: remark,
         boatName: row.boatName,

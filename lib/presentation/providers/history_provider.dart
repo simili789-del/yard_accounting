@@ -3,6 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/work_record.dart';
 import 'repository_providers.dart';
 
+/// 全量记录快照：供 history / stats / 摘要等查询型 Provider 复用，
+/// 避免各自重复全量遍历 Hive（M9）。记录变更后由保存点 invalidate 使其失效。
+final allRecordsProvider = Provider<List<WorkRecord>>((ref) {
+  final repository = ref.watch(recordRepositoryProvider);
+  return repository.all;
+});
+
 enum QuickRange { today, last7Days, thisMonth, lastMonth, custom }
 
 enum HistorySort { dateDesc, dateAsc, amountDesc }
@@ -80,17 +87,25 @@ final historyFilterProvider =
     StateProvider<HistoryFilter>((ref) => const HistoryFilter());
 
 final historyRecordsProvider = Provider<List<WorkRecord>>((ref) {
-  final repository = ref.watch(recordRepositoryProvider);
+  final all = ref.watch(allRecordsProvider);
   final filter = ref.watch(historyFilterProvider);
   // 接入真实单价表，金额排序才能正确生效（原 amount({}) 空表会使排序失效）
   final unitPrices = ref.watch(unitPricesProvider);
   final (start, end) = filter.resolveDates();
-  var records = repository.query(
-    start: start,
-    end: end,
-    keyword: filter.keyword,
-    shift: filter.shift,
-  );
+  // M9：复用全量快照，在内存中按条件过滤，避免重复全量遍历 Hive。
+  var records = all.where((r) {
+    if (r.date.isBefore(start) || r.date.isAfter(end)) return false;
+    if (filter.shift != null && r.shift != filter.shift) return false;
+    if (filter.keyword.isNotEmpty) {
+      final k = filter.keyword.toLowerCase();
+      if (!r.workerName.toLowerCase().contains(k) &&
+          !r.vehicleNo.toLowerCase().contains(k) &&
+          !(r.boatName?.toLowerCase().contains(k) ?? false)) {
+        return false;
+      }
+    }
+    return true;
+  }).toList();
   switch (filter.sort) {
     case HistorySort.dateDesc:
       records.sort((a, b) => b.date.compareTo(a.date));
@@ -104,13 +119,15 @@ final historyRecordsProvider = Provider<List<WorkRecord>>((ref) {
 
 /// 最近 7 天每日汇总，用于明细页顶部“近7天各类型车数”。
 final last7DaysSummaryProvider = Provider<Map<DateTime, List<WorkRecord>>>((ref) {
-  final repository = ref.watch(recordRepositoryProvider);
+  final all = ref.watch(allRecordsProvider);
   final now = DateTime.now();
   // 起点取 6 天前的 00:00:00，终点取今日 23:59:59.999，覆盖完整 7 个自然日
   final start = DateTime(now.year, now.month, now.day)
       .subtract(const Duration(days: 6));
   final end = DateTime(now.year, now.month, now.day, 23, 59, 59, 999, 999);
-  final records = repository.query(start: start, end: end);
+  // M9：复用全量快照，在内存中按日期窗口过滤。
+  final records =
+      all.where((r) => !r.date.isBefore(start) && !r.date.isAfter(end)).toList();
   final map = <DateTime, List<WorkRecord>>{};
   for (final r in records) {
     final key = DateTime(r.date.year, r.date.month, r.date.day);

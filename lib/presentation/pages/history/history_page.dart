@@ -204,10 +204,10 @@ class _FilterPanel extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
-                _QuickChip(label: '今天', active: filter.range == QuickRange.today, onTap: () => ref.read(historyFilterProvider.notifier).update((s) => s.copyWith(range: QuickRange.today))),
-                _QuickChip(label: '近7天', active: filter.range == QuickRange.last7Days, onTap: () => ref.read(historyFilterProvider.notifier).update((s) => s.copyWith(range: QuickRange.last7Days))),
-                _QuickChip(label: '本月', active: filter.range == QuickRange.thisMonth, onTap: () => ref.read(historyFilterProvider.notifier).update((s) => s.copyWith(range: QuickRange.thisMonth))),
-                _QuickChip(label: '上月', active: filter.range == QuickRange.lastMonth, onTap: () => ref.read(historyFilterProvider.notifier).update((s) => s.copyWith(range: QuickRange.lastMonth))),
+                _QuickChip(label: '今天', active: filter.range == QuickRange.today, onTap: () => _selectRange(ref, QuickRange.today)),
+                _QuickChip(label: '近7天', active: filter.range == QuickRange.last7Days, onTap: () => _selectRange(ref, QuickRange.last7Days)),
+                _QuickChip(label: '本月', active: filter.range == QuickRange.thisMonth, onTap: () => _selectRange(ref, QuickRange.thisMonth)),
+                _QuickChip(label: '上月', active: filter.range == QuickRange.lastMonth, onTap: () => _selectRange(ref, QuickRange.lastMonth)),
               ],
             ),
             const SizedBox(height: 12),
@@ -258,6 +258,10 @@ class _FilterPanel extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _selectRange(WidgetRef ref, QuickRange range) {
+    ref.read(historyFilterProvider.notifier).update((s) => s.copyWith(range: range));
   }
 
   Future<void> _pickDate(BuildContext context, WidgetRef ref,

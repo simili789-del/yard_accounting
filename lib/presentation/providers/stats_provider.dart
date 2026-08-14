@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/work_record.dart';
+import 'history_provider.dart';
 import 'repository_providers.dart';
 
 class PriceGroup {
@@ -76,7 +77,7 @@ final statsMonthProvider = StateProvider<DateTime>((ref) {
 final statsWorkerFilterProvider = StateProvider<String>((ref) => '');
 
 final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
-  final repository = ref.watch(recordRepositoryProvider);
+  final all = ref.watch(allRecordsProvider);
   final unitPrices = ref.watch(unitPricesProvider);
   final month = ref.watch(statsMonthProvider);
   final salary = ref.watch(salarySettingsProvider);
@@ -85,7 +86,11 @@ final monthlyStatsProvider = Provider<MonthlyStats>((ref) {
   final start = DateTime(month.year, month.month, 1);
   // 终点取当月最后一天 23:59:59.999，避免带时刻记录（如 JSON 恢复）被月末边界漏掉
   final end = DateTime(month.year, month.month + 1, 0, 23, 59, 59, 999, 999);
-  var records = repository.query(start: start, end: end);
+  // M9：复用全量快照，避免重复全量遍历 Hive。
+  var records = all.where((r) {
+    if (r.date.isBefore(start) || r.date.isAfter(end)) return false;
+    return true;
+  }).toList();
 
   if (workerFilter.isNotEmpty) {
     records = records

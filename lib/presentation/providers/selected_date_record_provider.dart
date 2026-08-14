@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/record_repository.dart';
@@ -35,6 +37,29 @@ class SelectedDateRecordNotifier
     reload();
   }
 
+  /// 自动保存防抖：字段改动后 800ms 落盘一次，避免「只改内存没点保存」时
+  /// App 被系统回收导致当日手填数据丢失。
+  Timer? _saveDebounce;
+
+  /// 字段改动后触发防抖落盘（不清除撤销栈，保留撤销能力）。
+  void _scheduleSave() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 800), () {
+      final cur = state.value;
+      if (cur == null) return;
+      _repository.saveRecord(cur);
+      // 刷新聚合视图（今日摘要/上次详情），但不重建输入框状态。
+      _ref.invalidate(dayRecordsProvider);
+      _ref.invalidate(lastRecordProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    super.dispose();
+  }
+
   /// 表单编辑撤销栈：每次字段改动前压入改动前的快照，最多保留 50 步。
   final List<WorkRecord> _undoStack = [];
 
@@ -58,6 +83,7 @@ class SelectedDateRecordNotifier
   DateTime get _date => _ref.read(selectedDateProvider);
 
   Future<void> reload() async {
+    _saveDebounce?.cancel();
     _undoStack.clear();
     state = const AsyncLoading();
     try {
@@ -90,6 +116,7 @@ class SelectedDateRecordNotifier
       shift: shift,
       boatName: boatName,
     ));
+    _scheduleSave();
   }
 
   void updateJobQuantity(String jobType, int delta) {
@@ -100,6 +127,7 @@ class SelectedDateRecordNotifier
     newQuantities[jobType] =
         ((newQuantities[jobType] ?? 0) + delta).clamp(0, 9999);
     state = AsyncData(current.copyWith(jobQuantities: newQuantities));
+    _scheduleSave();
   }
 
   void updateRemark(String remark) {
@@ -107,6 +135,7 @@ class SelectedDateRecordNotifier
     if (current == null) return;
     _pushUndo();
     state = AsyncData(current.copyWith(remark: remark));
+    _scheduleSave();
   }
 
   /// 一键复制昨日数据到当前选中日期。
@@ -123,6 +152,7 @@ class SelectedDateRecordNotifier
       shift: source.shift,
       jobQuantities: Map<String, int>.from(source.jobQuantities),
     ));
+    _scheduleSave();
   }
 
   Future<void> save() async {
@@ -137,5 +167,6 @@ class SelectedDateRecordNotifier
     _ref.invalidate(historyRecordsProvider);
     _ref.invalidate(lastRecordProvider);
     _ref.invalidate(last7DaysSummaryProvider);
+    _ref.invalidate(allRecordsProvider);
   }
 }

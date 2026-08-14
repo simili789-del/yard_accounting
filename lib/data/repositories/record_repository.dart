@@ -8,6 +8,11 @@ import '../../domain/entities/work_record.dart';
 class RecordRepository {
   Box<WorkRecord> get _box => Hive.box<WorkRecord>(HiveBoxes.records);
 
+  /// 判断键 [sk] 是否以 [base] 为「完整前缀」：整键相等，或下一个字符是 `_`
+  /// 分隔符。防止 `name='张三'` 时误匹配 `imp_日期_张三丰_...` 这类同名前缀记录。
+  bool _isBaseKey(String sk, String base) =>
+      sk == base || sk.startsWith('${base}_');
+
   /// 获取“今日”记录；若不存在则返回一条空白记录供表单编辑。
   Future<WorkRecord> getTodayRecord() async => getRecordByDate(DateTime.now());
 
@@ -97,7 +102,7 @@ class RecordRepository {
     } else {
       for (final k in _box.keys) {
         final sk = k.toString();
-        if (sk.startsWith(base)) keys.add(sk);
+        if (_isBaseKey(sk, base)) keys.add(sk);
       }
     }
     // 2) 旧格式兜底清理：升级前遗留的 imp_日期_姓名（裸）或
@@ -106,7 +111,7 @@ class RecordRepository {
     //    走「整人整日」分支时这些键已被 1) 覆盖，此处仅作去重不重复处理。
     for (final k in _box.keys) {
       final sk = k.toString();
-      if (!sk.startsWith(base)) continue;
+      if (!_isBaseKey(sk, base)) continue;
       final rest = sk.substring(base.length);
       final segs = rest.split('_').where((x) => x.isNotEmpty).toList();
       if (segs.isEmpty) {

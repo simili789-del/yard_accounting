@@ -24,44 +24,49 @@ class UnitPricesNotifier extends StateNotifier<Map<String, double>> {
   final SettingsRepository _repo;
   UnitPricesNotifier(this._repo) : super(_repo.getUnitPrices());
 
-  /// Hive 写入 fire-and-forget，落盘失败时仅打日志不阻塞 UI。
-  void _persist(Future<void> Function() write) {
-    write().catchError((Object e) {
+  /// 先乐观更新内存、再落盘；落盘失败时 refresh() 回滚乐观更新。
+  Future<void> _persist(Future<void> Function() write) async {
+    try {
+      await write();
+    } catch (e) {
       debugPrint('作业类型单价写入失败: $e');
-    });
+      refresh();
+    }
   }
 
   void refresh() {
     state = _repo.getUnitPrices();
   }
 
-  void setPrice(String jobType, double price) {
-    _persist(() => _repo.setUnitPrice(jobType, price));
+  Future<void> setPrice(String jobType, double price) async {
     state = Map<String, double>.from(state)..[jobType] = price;
+    await _persist(() => _repo.setUnitPrice(jobType, price));
   }
 
-  void remove(String jobType) {
-    _persist(() => _repo.removeJobType(jobType));
+  Future<void> remove(String jobType) async {
     state = Map<String, double>.from(state)..remove(jobType);
+    await _persist(() => _repo.removeJobType(jobType));
   }
 
   /// 重命名作业类型：保留原单价，旧名删除、新名写入。
-  void rename(String oldName, String newName) {
+  Future<void> rename(String oldName, String newName) async {
     if (oldName == newName) return;
     final price = state[oldName] ?? 1.0;
-    _persist(() async {
+    state = (Map<String, double>.from(state)
+      ..remove(oldName)
+      ..[newName] = price);
+    await _persist(() async {
       await _repo.setUnitPrice(newName, price);
       await _repo.removeJobType(oldName);
     });
-    final next = Map<String, double>.from(state);
-    next.remove(oldName);
-    next[newName] = price;
-    state = next;
   }
 
-  void add(String jobType, double price) {
-    _persist(() => _repo.setUnitPrice(jobType, price));
+  Future<void> add(String jobType, double price) async {
+    if (state.containsKey(jobType)) {
+      throw Exception('作业类型「$jobType」已存在');
+    }
     state = Map<String, double>.from(state)..[jobType] = price;
+    await _persist(() => _repo.setUnitPrice(jobType, price));
   }
 }
 

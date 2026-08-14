@@ -397,11 +397,20 @@ class _AddJobTypeCardState extends ConsumerState<_AddJobTypeCard> {
     super.dispose();
   }
 
-  void _add() {
+  Future<void> _add() async {
     final name = _nameCtrl.text.trim();
     final price = double.tryParse(_priceCtrl.text) ?? 0;
     if (name.isNotEmpty) {
-      ref.read(unitPricesProvider.notifier).add(name, price);
+      try {
+        await ref.read(unitPricesProvider.notifier).add(name, price);
+      } catch (e) {
+        if (!mounted) return;
+        final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
+        return;
+      }
       // 手动添加的类型若命中「其他作业类型」（固定高级类型），自动解锁显示，
       // 避免「设置页加了、首页却看不到」的脱节。
       if (DefaultJobTypes.advancedJobTypes.contains(name)) {

@@ -373,6 +373,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         boatName: (bt != null && bt.isNotEmpty) ? bt : null,
         quantities: quantities,
         yard: rowYard,
+        shift: shift.name,
       ));
     } else {
       // 铲车模式：各作业类型列的车数（同名标准类型跨列累加，
@@ -390,6 +391,7 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
         yard: rowYard,
+        shift: shift.name,
       ));
     }
   }
@@ -884,11 +886,17 @@ String? _detectRegionYard(List<List<dynamic>> rows, int headerRow) {
 /// 判断 [cand] 是否为与 [cur] 结构不同的「新子表头」（而非分页重复表头）。
 /// 以作业类型归一名集合是否相同区分：集合相同视为同源分页表头，
 /// 集合不同（含列数不同）视为新子表，需切换列映射。
+/// 但若两张子表「作业类型列集合相同、而货场列/船名列不同」，说明列映射其实不一致，
+/// 应判为新子表并切换列映射，否则货场归属会错乱。故仅当作业类型列、货场列、
+/// 船名列都一致时才视为同源分页表头。
 bool _isDifferentHeader(_HeaderInfo cand, _HeaderInfo cur) {
   if (cand.jobNames.length != cur.jobNames.length) return true;
   for (final n in cand.jobNames) {
     if (!cur.jobNames.contains(n)) return true;
   }
+  // 作业类型列集合相同，再比较货场列/船名列是否一致
+  if (cand.yardCol != cur.yardCol) return true;
+  if (cand.boatCol != cur.boatCol) return true;
   return false;
 }
 
@@ -998,11 +1006,17 @@ _RawWorkbook _fallbackDecodeBytes(Uint8List bytes) {
   final sstXml = files['xl/sharedStrings.xml'] ?? '';
   if (sstXml.isNotEmpty) {
     // <si><t>文本</t></si> 或 <si><t xml:space="preserve">文本</t></si>
+    // 富文本：<si><r><t>a</t></r><r><t>b</t></r></si> 需把多段 <t> 拼接合并。
     for (final m in RegExp(r'<si[^>]*>(.*?)</si>', dotAll: true)
         .allMatches(sstXml)) {
       final siContent = m.group(1) ?? '';
-      final tMatch = RegExp(r'<t(?:\s+[^>]*)?>([^<]*)</t>').firstMatch(siContent);
-      sharedStrings.add(tMatch?.group(1)?.trim() ?? '');
+      final sb = StringBuffer();
+      for (final t in RegExp(r'<t(?:\s+[^>]*)?>([^<]*)</t>', dotAll: true)
+          .allMatches(siContent)) {
+        sb.write(t.group(1) ?? '');
+      }
+      // 解码 XML 实体转义（&lt; &gt; &quot; &apos; &amp;，注意 &amp; 最后替换）
+      sharedStrings.add(_unescapeXml(sb.toString()).trim());
     }
   }
 
@@ -1059,38 +1073,55 @@ List<List<dynamic>> _parseSheetXml(String xml, List<String> sharedStrings) {
     // 解析该行内所有单元格 <c r="A1" t="s|inlineStr"><v>值</v></c>
     final cells = <dynamic>[];
 
-    // 先收集有明确列号的单元格
+    // 先收集有明确列号的单元格。
+    // 兼容富文本：内联字符串 <is><r><t>…</t></r>…</is> 需拼接多段 <t>，
+    // 且 <v>/<t> 文本可能含 XML 实体转义（&amp; 等），需解码。
     final colValues = <int, dynamic>{};
     for (final cMatch in RegExp(
-            r'<c\s+r="([A-Z]+)(\d+)"(?:\s+t="([^"]*)")?[^>]*>(?:<v>([^<]*)</v>)?(?:<is><t>([^<]*)</t></is>)?</c>')
+            r'<c\s+r="([A-Z]+)(\d+)"(?:\s+t="([^"]*)")?[^>]*>(.*?)</c>',
+            dotAll: true)
         .allMatches(rowContent)) {
       final colRef = cMatch.group(1)!; // 如 "A", "B", "AA"
-      final type = cMatch.group(3);     // "s"=共享字符串, "inlineStr", null=数字
-      final vText = cMatch.group(4);    // <v> 内容
-      final inlineT = cMatch.group(5);  // <is><t> 内容
+      final type = cMatch.group(3);     // "s"=共享字符串, "inlineStr", "str", null=数字
+      final inner = cMatch.group(4) ?? ''; // <c> 内部 XML
 
       final colIdx = _colRefToIndex(colRef);
 
       dynamic value;
-      if (type == 's' && vText != null) {
-        // 共享字符串索引
-        final idx = int.tryParse(vText);
+      if (type == 's') {
+        // 共享字符串索引：<v>idx</v>
+        final vText = RegExp(r'<v>([^<]*)</v>').firstMatch(inner)?.group(1);
+        final idx = vText != null ? int.tryParse(vText) : null;
         value = (idx != null && idx < sharedStrings.length)
             ? sharedStrings[idx]
-            : (vText.isNotEmpty ? vText : '');
-      } else if (inlineT != null) {
-        value = inlineT;
-      } else if (vText != null && vText.isNotEmpty) {
-        // 尝试解析为数字
-        final d = double.tryParse(vText);
-        if (d != null) {
-          // 整数返回 int，小数返回 double
-          value = d == d.roundToDouble() ? d.toInt() : d;
-        } else {
-          value = vText;
+            : (vText != null && vText.isNotEmpty ? vText : '');
+      } else if (type == 'inlineStr') {
+        // 内联字符串：可能含富文本 runs，拼接所有 <t> 段并解码实体
+        final sb = StringBuffer();
+        for (final t in RegExp(r'<t(?:\s+[^>]*)?>([^<]*)</t>', dotAll: true)
+            .allMatches(inner)) {
+          sb.write(t.group(1) ?? '');
         }
+        final raw = sb.toString();
+        value = raw.isNotEmpty ? _unescapeXml(raw) : '';
+      } else if (type == 'str') {
+        // 公式字符串结果：<v>文本</v>
+        final vText = RegExp(r'<v>([^<]*)</v>').firstMatch(inner)?.group(1);
+        value = vText != null && vText.isNotEmpty ? _unescapeXml(vText) : '';
       } else {
-        value = '';
+        // 数字（或空单元格）：<v>数字</v>
+        final vText = RegExp(r'<v>([^<]*)</v>').firstMatch(inner)?.group(1);
+        if (vText != null && vText.isNotEmpty) {
+          final d = double.tryParse(vText);
+          if (d != null) {
+            // 整数返回 int，小数返回 double
+            value = d == d.roundToDouble() ? d.toInt() : d;
+          } else {
+            value = vText;
+          }
+        } else {
+          value = '';
+        }
       }
       colValues[colIdx] = value;
     }
@@ -1106,6 +1137,18 @@ List<List<dynamic>> _parseSheetXml(String xml, List<String> sharedStrings) {
   }
 
   return rows;
+}
+
+/// 解码 XML 实体转义为普通字符。
+/// 仅处理这 5 个最常见的实体；注意替换顺序——&amp; 必须最后替换，
+/// 否则会先把已解码出的 &lt; 等里的 & 再拼成 &amp;lt; 造成二次错误。
+String _unescapeXml(String s) {
+  return s
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&amp;', '&');
 }
 
 /// 列引用转 0-based 索引：A=0, B=1, ..., Z=25, AA=26, ...

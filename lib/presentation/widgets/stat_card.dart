@@ -28,34 +28,28 @@ class StatCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child:             Text(
-              value,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(
-                    color: valueColor ?? cs.primary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                  child: Text(
+                    value,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: valueColor ?? cs.primary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
-            ),
                 ),
                 if (trailing != null) trailing!,
               ],
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
             ],
           ],
         ),

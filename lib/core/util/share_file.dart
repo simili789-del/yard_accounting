@@ -12,7 +12,8 @@ import 'package:share_plus/share_plus.dart';
 /// 使用 share_plus 7.x 静态 API：[Share.shareXFiles]。
 Future<void> shareTextFile(String content, String filename) async {
   final dir = await getTemporaryDirectory();
-  final file = File('${dir.path}/$filename');
+  final safeName = filename.split(RegExp(r'[/\\]')).last;
+  final file = File('${dir.path}/$safeName');
   await file.writeAsBytes(utf8.encode(content), flush: true);
   await Share.shareXFiles(
     [XFile(file.path)],

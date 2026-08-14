@@ -59,7 +59,14 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
           IconButton(
             icon: const Icon(Icons.save),
             tooltip: '保存',
-            onPressed: _save,
+            onPressed: () async {
+              try {
+                await _save();
+              } catch (e) {
+                if (!mounted) return;
+                _showSaveError(e);
+              }
+            },
           ),
         ],
       ),
@@ -163,6 +170,12 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showSaveError(Object e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('保存失败：$e')),
     );
   }
 

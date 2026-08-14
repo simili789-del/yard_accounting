@@ -202,8 +202,8 @@ class RecordSerialization {
     Map<String, double>? jobPrices;
     if (settings['jobPrices'] is Map) {
       jobPrices = {};
-      (settings['jobPrices'] as Map).forEach((k, v) {
-        jobPrices![k.toString()] = (v as num).toDouble();
+      (settings['jobPrices'] as Map?)?.forEach((k, v) {
+        jobPrices![k.toString()] = (v as num?)?.toDouble() ?? 0;
       });
     }
 
@@ -270,6 +270,10 @@ class RecordSerialization {
   static String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  static String _csv(String v) => '"${v.replaceAll('"', '""')}"';
+  static String _csv(String v) {
+    var s = v.replaceAll('"', '""');
+    if (RegExp(r'^[=+\-@]').hasMatch(s)) s = " $s";
+    return '"$s"';
+  }
 
 }

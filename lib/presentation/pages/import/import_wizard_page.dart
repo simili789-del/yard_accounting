@@ -164,7 +164,7 @@ class _SheetSelector extends StatelessWidget {
   }
 }
 
-class _HeaderRowTile extends StatelessWidget {
+class _HeaderRowTile extends StatefulWidget {
   final int headerRow;
   final int? headerOverride;
   final ValueChanged<int?> onChanged;
@@ -172,23 +172,58 @@ class _HeaderRowTile extends StatelessWidget {
       {required this.headerRow, required this.headerOverride, required this.onChanged});
 
   @override
+  State<_HeaderRowTile> createState() => _HeaderRowTileState();
+}
+
+class _HeaderRowTileState extends State<_HeaderRowTile> {
+  late final TextEditingController _ctrl;
+  late final FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+      text: widget.headerOverride?.toString() ?? widget.headerRow.toString(),
+    );
+    _focus = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeaderRowTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 外部（重新解析/切换表头行）改变表头行时同步显示；用户正在编辑（聚焦）则不打断。
+    if ((widget.headerOverride != oldWidget.headerOverride ||
+            widget.headerRow != oldWidget.headerRow) &&
+        !_focus.hasFocus) {
+      _ctrl.text =
+          widget.headerOverride?.toString() ?? widget.headerRow.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ctrl = TextEditingController(
-        text: headerOverride?.toString() ?? headerRow.toString());
     return ListTile(
       leading: const Icon(Icons.format_list_numbered),
-      title: Text(headerOverride == null
-          ? '表头行：第 ${headerRow + 1} 行（自动识别）'
-          : '表头行：第 ${headerOverride! + 1} 行（手动）'),
+      title: Text(widget.headerOverride == null
+          ? '表头行：第 ${widget.headerRow + 1} 行（自动识别）'
+          : '表头行：第 ${widget.headerOverride! + 1} 行（手动）'),
       trailing: SizedBox(
         width: 70,
         child: TextFormField(
-          controller: ctrl,
+          controller: _ctrl,
+          focusNode: _focus,
           decoration: const InputDecoration(labelText: '行号'),
           keyboardType: TextInputType.number,
           onFieldSubmitted: (v) {
             final n = int.tryParse(v);
-            onChanged(n != null && n > 0 ? n - 1 : null);
+            widget.onChanged(n != null && n > 0 ? n - 1 : null);
           },
         ),
       ),
@@ -556,7 +591,7 @@ class _WorkerList extends ConsumerWidget {
   }
 }
 
-class _ErrorPanel extends StatelessWidget {
+class _ErrorPanel extends StatefulWidget {
   final String error;
   final VoidCallback onRetry;
   final int? headerRow;
@@ -569,9 +604,40 @@ class _ErrorPanel extends StatelessWidget {
   });
 
   @override
+  State<_ErrorPanel> createState() => _ErrorPanelState();
+}
+
+class _ErrorPanelState extends State<_ErrorPanel> {
+  late final TextEditingController _ctrl;
+  late final FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+      text: widget.headerRow != null ? (widget.headerRow! + 1).toString() : '',
+    );
+    _focus = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ErrorPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.headerRow != oldWidget.headerRow && !_focus.hasFocus) {
+      _ctrl.text =
+          widget.headerRow != null ? (widget.headerRow! + 1).toString() : '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ctrl = TextEditingController(
-        text: headerRow != null ? (headerRow! + 1).toString() : '');
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -579,25 +645,26 @@ class _ErrorPanel extends StatelessWidget {
         const SizedBox(height: 12),
         Text('解析失败', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(error, style: const TextStyle(color: Colors.red)),
+        Text(widget.error, style: const TextStyle(color: Colors.red)),
         const SizedBox(height: 16),
         const Text('若是表头行识别有误，可手动指定（填第几行，从 1 开始）：'),
         const SizedBox(height: 8),
         SizedBox(
           width: 120,
           child: TextFormField(
-            controller: ctrl,
+            controller: _ctrl,
+            focusNode: _focus,
             decoration: const InputDecoration(labelText: '表头行号'),
             keyboardType: TextInputType.number,
             onFieldSubmitted: (v) {
               final n = int.tryParse(v);
-              onHeaderRowChanged(n != null && n > 0 ? n - 1 : null);
-              onRetry();
+              widget.onHeaderRowChanged(n != null && n > 0 ? n - 1 : null);
+              widget.onRetry();
             },
           ),
         ),
         const SizedBox(height: 16),
-        FilledButton(onPressed: onRetry, child: const Text('重试')),
+        FilledButton(onPressed: widget.onRetry, child: const Text('重试')),
       ],
     );
   }

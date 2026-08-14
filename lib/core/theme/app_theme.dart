@@ -28,7 +28,8 @@ class AppTheme {
 
   /// 按索引取色（越界时取模循环，避免越界崩溃）。
   static Color _seed(int index) =>
-      primaries[index % primaries.length];
+      primaries[((index % primaries.length) + primaries.length) %
+          primaries.length];
 
   static ThemeData _createTheme(Color seedColor, Brightness brightness) {
     final colorScheme = ColorScheme.fromSeed(
