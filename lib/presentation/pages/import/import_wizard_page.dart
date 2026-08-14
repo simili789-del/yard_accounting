@@ -6,6 +6,10 @@ import '../../../domain/entities/work_record.dart';
 import '../../../data/repositories/excel_importer.dart';
 import '../../providers/import_provider.dart';
 
+/// 仅在「需要它的司机」导入时才展开显示的作业类型（默认折叠隐藏，减少界面 clutter）。
+/// 例如火车装车只有 56 道等少数司机会用到，其余司机导入时不应占用界面空间。
+const Set<String> _advancedJobTypes = {'火车装车'};
+
 /// Excel 导入向导：接收分享或手动选文件后进入。
 /// 流程：解析 → 选 sheet/表头行 → 预览列映射 → 勾选人员 → 确认导入并同步作业类型。
 class ImportWizardPage extends ConsumerStatefulWidget {
@@ -202,6 +206,12 @@ class _MappingPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final advancedJobCols = result.jobColumns
+        .where((c) => _advancedJobTypes.contains(c.name))
+        .toList();
+    final regularJobCols = result.jobColumns
+        .where((c) => !_advancedJobTypes.contains(c.name))
+        .toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -237,13 +247,39 @@ class _MappingPreview extends StatelessWidget {
                     avatar: const Icon(Icons.access_time),
                     backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
                   ),
-                ...result.jobColumns.map((c) => Chip(
+                ...regularJobCols.map((c) => Chip(
                       label: Text(c.price != null ? '${c.name}（¥${c.price}）' : c.name),
                       avatar: const Icon(Icons.build),
                       backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                     )),
               ],
             ),
+            if (advancedJobCols.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ExpansionTile(
+                initiallyExpanded: true,
+                leading: const Icon(Icons.tune),
+                title: const Text('其他作业类型（火车装车等，仅相关司机使用）'),
+                childrenPadding:
+                    const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: advancedJobCols
+                        .map((c) => Chip(
+                              label: Text(c.price != null
+                                  ? '${c.name}（¥${c.price}）'
+                                  : c.name),
+                              avatar: const Icon(Icons.build),
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primaryContainer,
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -387,6 +423,13 @@ class _WorkerList extends ConsumerWidget {
       nameCounts[r.workerName] = (nameCounts[r.workerName] ?? 0) + 1;
     }
     final hasDuplicateName = nameCounts.values.any((n) => n > 1);
+    // 货场仅在「需要区分」时才逐行显示：单货场时只在顶部提示一次，无货场时完全不显示，
+    // 避免 56 道等表格里每行都重复「货场 XX」造成界面凌乱。
+    final yards = result.rows
+        .where((r) => r.yard != null && r.yard!.isNotEmpty)
+        .map((r) => r.yard!)
+        .toSet();
+    final showYardPerRow = yards.length > 1;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -416,6 +459,15 @@ class _WorkerList extends ConsumerWidget {
                 ),
               ),
             const SizedBox(height: 4),
+            if (yards.length == 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Chip(
+                  label: Text('货场：${yards.first}'),
+                  avatar: const Icon(Icons.location_on),
+                  backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                ),
+              ),
             ...result.rows.map((row) {
               final selected = state.selectedWorkers.contains(row.workerName);
               final disabled = state.enforceFixed &&
@@ -435,7 +487,9 @@ class _WorkerList extends ConsumerWidget {
                 title: Text(row.workerName),
                 subtitle: Text(
                   [
-                    if (row.yard != null && row.yard!.isNotEmpty)
+                    if (showYardPerRow &&
+                        row.yard != null &&
+                        row.yard!.isNotEmpty)
                       '货场 ${row.yard}',
                     if (row.vehicleNo.isNotEmpty) '车号 ${row.vehicleNo}',
                     if (row.boatName != null && row.boatName!.isNotEmpty)
