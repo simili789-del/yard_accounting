@@ -70,7 +70,9 @@ class HistoryPage extends ConsumerWidget {
                                   builder: (_) => EditRecordPage(record: r),
                                 ),
                               );
-                              // 编辑返回后刷新全部记录相关 Provider（含首页今日记账/统计），避免联动残留
+                              // 编辑返回后刷新全部记录相关 Provider（含首页今日记账/统计），避免联动残留。
+                              // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+                              ref.invalidate(allRecordsProvider);
                               ref.invalidate(historyRecordsProvider);
                               ref.invalidate(last7DaysSummaryProvider);
                               ref.invalidate(monthlyStatsProvider);
@@ -82,7 +84,9 @@ class HistoryPage extends ConsumerWidget {
                               await ref
                                   .read(recordRepositoryProvider)
                                   .deleteRecords([r.id]);
-                              // 删除后刷新所有记录相关 Provider（含首页今日记账），否则 UI 残留旧数据
+                              // 删除后刷新所有记录相关 Provider（含首页今日记账），否则 UI 残留旧数据。
+                              // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+                              ref.invalidate(allRecordsProvider);
                               ref.invalidate(historyRecordsProvider);
                               ref.invalidate(last7DaysSummaryProvider);
                               ref.invalidate(monthlyStatsProvider);

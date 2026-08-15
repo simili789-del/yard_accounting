@@ -194,7 +194,9 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     // 否则会覆盖同日「今日记账」并造成重复统计）。
     await ref.read(recordRepositoryProvider).putRecord(updated);
     if (!mounted) return;
-    // 编辑保存后刷新全部记录相关 Provider，确保统计/今日摘要/近7天同步更新
+    // 编辑保存后刷新全部记录相关 Provider，确保统计/今日摘要/近7天同步更新。
+    // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+    ref.invalidate(allRecordsProvider);
     ref.invalidate(historyRecordsProvider);
     ref.invalidate(last7DaysSummaryProvider);
     ref.invalidate(monthlyStatsProvider);

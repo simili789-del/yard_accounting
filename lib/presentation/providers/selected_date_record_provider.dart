@@ -48,9 +48,13 @@ class SelectedDateRecordNotifier
       final cur = state.value;
       if (cur == null) return;
       _repository.saveRecord(cur);
-      // 刷新聚合视图（今日摘要/上次详情），但不重建输入框状态。
+      // 刷新聚合视图（今日摘要/上次详情/明细/月报），但不重建输入框状态。
+      _ref.invalidate(allRecordsProvider);
       _ref.invalidate(dayRecordsProvider);
       _ref.invalidate(lastRecordProvider);
+      _ref.invalidate(historyRecordsProvider);
+      _ref.invalidate(last7DaysSummaryProvider);
+      _ref.invalidate(monthlyStatsProvider);
     });
   }
 

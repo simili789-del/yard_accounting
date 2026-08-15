@@ -304,7 +304,9 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     }
     await repo.saveImportedRecords(records);
 
-    // 5) 刷新所有记录相关 Provider，让首页/明细页/月报页立刻反映新数据
+    // 5) 刷新所有记录相关 Provider，让首页/明细页/月报页立刻反映新数据。
+    //    必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+    _ref.invalidate(allRecordsProvider);
     _ref.invalidate(historyRecordsProvider);
     _ref.invalidate(lastRecordProvider);
     _ref.invalidate(selectedDateRecordProvider);
