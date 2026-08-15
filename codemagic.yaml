@@ -98,3 +98,8 @@ workflows:
       email:
         recipients:
           - team@yard-accounting.com
+      github_release:
+        # 每次升级请同步修改下面的 tag 与 name（与 pubspec.yaml 的 version 对应）
+        tag: v1.0.0
+        name: 货场记账 v1.0.0
+        prerelease: false
