@@ -13,10 +13,10 @@ workflows:
       # 使用步骤：
       # 1. Codemagic 后台 → Code signing identities → Android keystores → 生成或上传 keystore
       # 2. 记住你填的 Reference name（如 yard_release_key）
-      # 3. 把下面注释里的 keystore_reference 改成你的 Reference name，取消注释即可启用
+      # 3. keystore_reference 已改为 huochang 并启用
       # 4. 一定要在本地备份 keystore 文件，丢失后此 App 将无法更新（除非换包名重发）
-      # android_signing:
-      #   - keystore_reference
+      android_signing:
+        - huochang
     # 持久缓存：第一次下载成功的 Gradle 压缩包会被缓存，后续构建直接复用，不再联网。
     cache:
       cache_paths:
