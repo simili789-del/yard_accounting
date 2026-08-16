@@ -94,12 +94,16 @@ workflows:
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/**/outputs/**/mapping.txt
+    android_signing:
+      # === 正式签名（待启用）===
+      # 步骤：Codemagic 后台 → Code signing → Android keystores → 生成或上传 keystore，
+      #       系统会给出两个环境变量（如 KEYSTORE / KEYSTORE_PROPERTIES）。
+      #       把下面的变量名改成你实际的，并取消下面两行注释即可生效。
+      # ⚠️ keystore 文件务必自己下载备份，丢失后此 App 将无法再更新（除非换包名重发）。
+      # - keystore_credentials: $KEYSTORE
+      #   keystore_properties: $KEYSTORE_PROPERTIES
+
     publishing:
       email:
         recipients:
           - team@yard-accounting.com
-      github_release:
-        # 每次升级请同步修改下面的 tag 与 name（与 pubspec.yaml 的 version 对应）
-        tag: v1.0.0
-        name: 货场记账 v1.0.0
-        prerelease: false
