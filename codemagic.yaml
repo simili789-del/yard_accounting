@@ -9,6 +9,14 @@ workflows:
       java: 17
       vars:
         PACKAGE_NAME: "com.yard.accounting"
+      # 正式签名配置（CodeMagic 专用位置：必须在 environment 下，不是 workflow 根级）
+      # 使用步骤：
+      # 1. Codemagic 后台 → Code signing identities → Android keystores → 生成或上传 keystore
+      # 2. 记住你填的 Reference name（如 yard_release_key）
+      # 3. 把下面注释里的 keystore_reference 改成你的 Reference name，取消注释即可启用
+      # 4. 一定要在本地备份 keystore 文件，丢失后此 App 将无法更新（除非换包名重发）
+      # android_signing:
+      #   - keystore_reference
     # 持久缓存：第一次下载成功的 Gradle 压缩包会被缓存，后续构建直接复用，不再联网。
     cache:
       cache_paths:
@@ -17,6 +25,20 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+      - name: Map CodeMagic signing env vars
+        script: |
+          # Codemagic 默认注入 CM_KEYSTORE_PATH / CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS / CM_KEY_PASSWORD
+          # 项目 build.gradle 使用 KEYSTORE_PATH / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
+          # 若后台已配置 android_signing，则建立别名，让 Gradle 能读到；未配置时为空，不影响构建
+          if [ -n "${CM_KEYSTORE_PATH:-}" ]; then
+            echo "KEYSTORE_PATH=$CM_KEYSTORE_PATH" >> "$CM_ENV"
+            echo "KEYSTORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> "$CM_ENV"
+            echo "KEY_ALIAS=$CM_KEY_ALIAS" >> "$CM_ENV"
+            echo "KEY_PASSWORD=$CM_KEY_PASSWORD" >> "$CM_ENV"
+            echo "签名环境变量已映射"
+          else
+            echo "未配置 CodeMagic android_signing，使用 debug 签名构建"
+          fi
       - name: Get Flutter packages
         script: flutter pub get
       - name: Generate code (Hive/Freezed)
@@ -94,15 +116,6 @@ workflows:
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/**/outputs/**/mapping.txt
-    android_signing:
-      # === 正式签名（待启用）===
-      # 步骤：Codemagic 后台 → Code signing → Android keystores → 生成或上传 keystore，
-      #       系统会给出两个环境变量（如 KEYSTORE / KEYSTORE_PROPERTIES）。
-      #       把下面的变量名改成你实际的，并取消下面两行注释即可生效。
-      # ⚠️ keystore 文件务必自己下载备份，丢失后此 App 将无法再更新（除非换包名重发）。
-      # - keystore_credentials: $KEYSTORE
-      #   keystore_properties: $KEYSTORE_PROPERTIES
-
     publishing:
       email:
         recipients:
