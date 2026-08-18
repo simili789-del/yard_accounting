@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_dimens.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/repository_providers.dart';
 import '../providers/selected_date_record_provider.dart';
@@ -10,6 +11,9 @@ import '../providers/selected_date_record_provider.dart';
 ///
 /// 直接返回真实 [AppBar]，由其统一处理状态栏安全区、背景与固定高度，
 /// 避免自定义控件当 appBar 使用时各页面高度/背景不一致导致的「错行」。
+///
+/// 对外 API 与原版完全一致（仅 actions 一个可选参数），所有 Provider
+/// 读写方式未做任何改动。
 class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
   /// 作为 Scaffold.appBar 使用时必须提供固定高度（与下方 toolbarHeight 保持一致）。
   @override
@@ -23,6 +27,7 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final cs = Theme.of(context).colorScheme;
     final now = DateTime.now();
     const weekDays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
     final weekDay = weekDays[now.weekday - 1];
@@ -32,27 +37,31 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       toolbarHeight: 64,
       centerTitle: false,
-      titleSpacing: 16,
+      titleSpacing: AppSpacing.lg,
       title: Row(
         children: [
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(10),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cs.primary, cs.primary.withOpacity(0.75)],
+              ),
+              borderRadius: AppRadius.chip,
             ),
             alignment: Alignment.center,
             child: Text(
               '记',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimary,
+                color: cs.onPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,7 +78,7 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 Text(
                   '${DateFormat('yyyy年M月d日').format(now)} $weekDay',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: cs.onSurfaceVariant,
                       ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -82,7 +91,7 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
       actions: [
         ...?actions,
         IconButton(
-          icon: const Icon(Icons.undo_outlined),
+          icon: const Icon(Icons.undo_rounded),
           tooltip: '撤销',
           onPressed: () {
             final notifier = ref.read(selectedDateRecordProvider.notifier);
@@ -100,7 +109,9 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
         IconButton(
           icon: Icon(
-            themeMode == 'dark' ? Icons.dark_mode : Icons.wb_sunny_outlined,
+            themeMode == 'dark'
+                ? Icons.dark_mode_rounded
+                : Icons.wb_sunny_outlined,
           ),
           tooltip: '切换主题',
           onPressed: () {
@@ -113,6 +124,7 @@ class YardAppBar extends ConsumerWidget implements PreferredSizeWidget {
             ref.read(settingsRepositoryProvider).setThemeMode(next);
           },
         ),
+        const SizedBox(width: AppSpacing.xs),
       ],
     );
   }

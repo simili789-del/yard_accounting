@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/constants/job_types.dart';
+import '../../core/theme/app_dimens.dart';
 
 /// 作业类型计数卡片：彩色圆点 + 名称/单价 + 键盘直接输入数量 + - / + 微调。
+///
+/// 对外 API 与原版完全一致（jobType / quantity / unitPrice / onChanged），
+/// 业务语义未做任何改动：仍是「传绝对值，范围由上层 clamp」。
 class JobTypeCard extends StatefulWidget {
   final String jobType;
   final int quantity;
@@ -61,21 +65,34 @@ class _JobTypeCardState extends State<JobTypeCard> {
   Widget build(BuildContext context) {
     final color = DefaultJobTypes.colorOf(widget.jobType);
     final cs = Theme.of(context).colorScheme;
+    final active = widget.quantity > 0;
+    final subtotal = widget.quantity * widget.unitPrice;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
-            Container(
-              width: 10,
-              height: 10,
+            AnimatedContainer(
+              duration: AppMotion.normal,
+              curve: AppMotion.standard,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
+                color: color.withOpacity(active ? 0.16 : 0.08),
+                borderRadius: AppRadius.chip,
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,20 +105,24 @@ class _JobTypeCardState extends State<JobTypeCard> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '¥${widget.unitPrice.toStringAsFixed(2)}/车',
+                    active
+                        ? '¥${widget.unitPrice.toStringAsFixed(2)}/车 · 小计 ¥${subtotal.toStringAsFixed(2)}'
+                        : '¥${widget.unitPrice.toStringAsFixed(2)}/车',
                     style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
             _StepButton(
-              icon: Icons.remove,
+              icon: Icons.remove_rounded,
               onPressed: widget.quantity > 0
                   ? () => widget.onChanged(widget.quantity - 1)
                   : null,
             ),
             SizedBox(
-              width: 60,
+              width: 56,
               child: TextField(
                 controller: _ctrl,
                 focusNode: _focus,
@@ -113,6 +134,7 @@ class _JobTypeCardState extends State<JobTypeCard> {
                 textAlign: TextAlign.center,
                 decoration: const InputDecoration(
                   isCollapsed: true,
+                  filled: false,
                   contentPadding: EdgeInsets.symmetric(vertical: 6),
                   border: UnderlineInputBorder(),
                 ),
@@ -124,7 +146,7 @@ class _JobTypeCardState extends State<JobTypeCard> {
               ),
             ),
             _StepButton(
-              icon: Icons.add,
+              icon: Icons.add_rounded,
               color: cs.primary,
               onPressed: () => widget.onChanged(widget.quantity + 1),
             ),
@@ -135,7 +157,8 @@ class _JobTypeCardState extends State<JobTypeCard> {
   }
 }
 
-class _StepButton extends StatelessWidget {
+/// +/- 微调按钮：轻量按压缩放反馈，纯视觉层，不影响点击语义。
+class _StepButton extends StatefulWidget {
   final IconData icon;
   final Color? color;
   final VoidCallback? onPressed;
@@ -143,14 +166,37 @@ class _StepButton extends StatelessWidget {
   const _StepButton({required this.icon, this.color, this.onPressed});
 
   @override
+  State<_StepButton> createState() => _StepButtonState();
+}
+
+class _StepButtonState extends State<_StepButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool v) {
+    if (widget.onPressed == null) return;
+    setState(() => _pressed = v);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(icon, color: color),
-      onPressed: onPressed,
-      style: IconButton.styleFrom(
-        backgroundColor: (color ?? Theme.of(context).colorScheme.primary)
-            .withOpacity(0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    final color = widget.color ?? Theme.of(context).colorScheme.primary;
+    final enabled = widget.onPressed != null;
+
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      child: AnimatedScale(
+        duration: AppMotion.fast,
+        scale: _pressed ? 0.88 : 1.0,
+        child: IconButton(
+          icon: Icon(widget.icon, color: enabled ? color : null),
+          onPressed: widget.onPressed,
+          style: IconButton.styleFrom(
+            backgroundColor: color.withOpacity(enabled ? 0.1 : 0.04),
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.chip),
+          ),
+        ),
       ),
     );
   }
