@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,7 +15,6 @@ import '../../providers/app_settings_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
-import '../../providers/stats_provider.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
 
@@ -889,9 +889,14 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                           fixedWorkers: srepo.getFixedWorkers(),
                           importTemplate: srepo.getImportTemplate(),
                         );
-                        final json = RecordSerialization.toFullBackupJson(
+                        // L2：payload 在主线程廉价构造，jsonEncode 放到独立 isolate，
+                        // 避免多年数据构造超大 JSON 时阻塞主线程卡 UI。
+                        final payload = RecordSerialization.fullBackupPayload(
                           backup,
                         );
+                        // L2：payload 在主线程廉价构造，jsonEncode 放到独立 isolate，
+                        // 避免多年数据构造超大 JSON 时阻塞主线程卡 UI。
+                        final json = await compute(jsonEncodePayload, payload);
                         await shareTextFile(json, '货场记账备份_$_stamp.json');
                         if (mounted) {
                           _snack('已导出 ${records.length} 条记录及全部配置');
@@ -909,7 +914,15 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                         );
                         final path = picked?.files.single.path;
                         if (path == null) return;
-                        final content = await File(path).readAsString();
+                        // M4 防护：拒绝超大备份文件，避免整文件读入内存后 OOM。
+                        final file = File(path);
+                        if (file.lengthSync() > 50 * 1024 * 1024) {
+                          if (mounted) {
+                            _snack('备份文件过大（>50MB），已拒绝解析以防内存溢出');
+                          }
+                          return;
+                        }
+                        final content = await file.readAsString();
                         final backup = RecordSerialization.parseFullBackup(
                           content,
                         );
@@ -945,11 +958,9 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                             backup.importTemplate!,
                           );
                         }
-                        ref.invalidate(historyRecordsProvider);
-                        ref.invalidate(lastRecordProvider);
-                        ref.invalidate(last7DaysSummaryProvider);
-                        ref.invalidate(monthlyStatsProvider);
-                        ref.invalidate(dayRecordsProvider);
+                        // H2：失效全量快照根即可级联刷新所有派生 Provider；
+                        // 配置类 Provider（单价/工资/应用设置/主题）单独刷新。
+                        ref.invalidate(allRecordsProvider);
                         ref.invalidate(selectedDateRecordProvider);
                         ref.invalidate(unitPricesProvider);
                         ref.invalidate(salarySettingsProvider);
@@ -973,11 +984,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                         await ref
                             .read(recordRepositoryProvider)
                             .seedSampleData();
-                        ref.invalidate(historyRecordsProvider);
-                        ref.invalidate(lastRecordProvider);
-                        ref.invalidate(last7DaysSummaryProvider);
-                        ref.invalidate(monthlyStatsProvider);
-                        ref.invalidate(dayRecordsProvider);
+                        ref.invalidate(allRecordsProvider);
                         ref.invalidate(selectedDateRecordProvider);
                         if (mounted) _snack('已写入示例数据');
                       }),
@@ -996,13 +1003,9 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                         await ref
                             .read(recordRepositoryProvider)
                             .clearAllRecords();
-                        // 刷新所有依赖记录数据的 Provider，确保首页/明细页/统计页均无残留
-                        ref.invalidate(historyRecordsProvider);
-                        ref.invalidate(lastRecordProvider);
+                        // H2：失效全量快照根即可级联刷新所有派生 Provider
+                        ref.invalidate(allRecordsProvider);
                         ref.invalidate(selectedDateRecordProvider);
-                        ref.invalidate(last7DaysSummaryProvider);
-                        ref.invalidate(monthlyStatsProvider);
-                        ref.invalidate(dayRecordsProvider);
                         if (mounted) _snack('已清空全部数据');
                       }),
                 ),

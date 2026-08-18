@@ -126,6 +126,11 @@ class ExcelParseResult {
 /// [headerRow] 不传则自动扫描含「姓名」的行。
 ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
   final bytes = File(path).readAsBytesSync();
+  // M5 防护：拒绝超大文件，避免把整文件读进内存后 OOM / 主线程长时间阻塞。
+  const maxBytes = 50 * 1024 * 1024; // 50MB
+  if (bytes.length > maxBytes) {
+    throw Exception('文件过大（>50MB），已拒绝解析以防内存溢出');
+  }
   final lower = path.toLowerCase();
 
   // 主路径：spreadsheet_decoder（快速、功能全，但不支持批注/复杂格式）
@@ -365,7 +370,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
       }
       if (quantities.isEmpty) continue;
       // 船名写入 boatName 字段（按船分条记录，统计时自动相加），备注只保留原始备注。
-      final remark = _readRemark(rows[r], remarkC, header.remarkFallbackCol);
+      // 同时把「加班」列的值并入备注，与 OCR 对账方案"备注含『加班』即判加班"一致。
+      final remark = _mergeOvertimeRemark(
+        _readRemark(rows[r], remarkC, header.remarkFallbackCol),
+        _readOvertime(rows[r], header.overtimeCol),
+      );
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
@@ -384,10 +393,15 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
         if (q > 0) quantities[e.value.name] = (quantities[e.value.name] ?? 0) + q;
       }
       if (quantities.isEmpty) continue;
+      // 把「加班」列的值并入备注，与 OCR 对账方案"备注含『加班』即判加班"一致。
+      final remark = _mergeOvertimeRemark(
+        _readRemark(rows[r], remarkC, header.remarkFallbackCol),
+        _readOvertime(rows[r], header.overtimeCol),
+      );
       result.add(ImportedRow(
         workerName: name,
         vehicleNo: vehC != null ? _formatVehicleNo(rows[r][vehC]) : '',
-        remark: _readRemark(rows[r], remarkC, header.remarkFallbackCol),
+        remark: remark,
         boatName: (rowBoat != null && rowBoat.isNotEmpty) ? rowBoat : null,
         quantities: quantities,
         yard: rowYard,
@@ -445,6 +459,11 @@ ExcelParseResult parseXlsx(String path, {String? sheetName, int? headerRow}) {
     sheetImportable: sheetImportableMap,
   );
 }
+
+/// 在独立 isolate 中解析 xlsx（compute 入口），避免大文件解析阻塞主线程（M5）。
+/// 参数用单值记录包裹，满足 compute 的「单一消息」约束。
+ExcelParseResult parseXlsxInIsolate((String, String?, int?) args) =>
+    parseXlsx(args.$1, sheetName: args.$2, headerRow: args.$3);
 
 /// 判断表头/表名是否像「考勤/工资/汇总/火车明细」等非绩效表。
 /// 依据：表名含排除关键词、列数过多（>25）、或候选作业列中纯数字/序号列过半
@@ -734,6 +753,27 @@ String? _readRemark(List<dynamic> row, int? remarkCol, int? fallbackCol) {
   return null;
 }
 
+/// 读取某行「加班」列的值；非空（且非纯 0）表示本行（司机当天该班次）为加班班次。
+/// 用于把加班信息并入住注，与 OCR 对账方案"备注含『加班』即判加班"的约定一致。
+/// 注：普通行的加班列常为「0」或留空，纯 0 视为无加班，避免误标。
+String? _readOvertime(List<dynamic> row, int? overtimeCol) {
+  if (overtimeCol == null || overtimeCol >= row.length) return null;
+  final t = _text(row[overtimeCol]) ?? '';
+  final trimmed = t.trim();
+  if (trimmed.isEmpty) return null;
+  // 纯数字 0（如「0」「0.0」）视为无加班，避免普通行被误标为加班班次
+  if (RegExp(r'^-?0(\.0+)?$').hasMatch(trimmed)) return null;
+  return t;
+}
+
+/// 把加班信息并入备注：加班列有值 → 末尾补『加班』关键字（供 OCR 对账判加班）。
+/// 与手动录入"备注写加班"的约定一致；备注原样内容保留，仅追加关键字。
+String? _mergeOvertimeRemark(String? remark, String? overtimeValue) {
+  if (overtimeValue == null || overtimeValue.isEmpty) return remark;
+  final base = (remark != null && remark.isNotEmpty) ? remark : null;
+  return [if (base != null) base, '加班'].join('·');
+}
+
 /// 判断字符串是否为纯数字（整数或小数），用于备注兜底列过滤杂散数字。
 bool _isPureNumber(String s) => RegExp(r'^-?\d+(\.\d+)?$').hasMatch(s.trim());
 
@@ -966,6 +1006,18 @@ _RawWorkbook _fromExcel2003(Uint8List bytes) {
 /// 不支持样式/公式/合并单元格等高级特性——对司机绩效表足够了。
 _RawWorkbook _fallbackDecodeBytes(Uint8List bytes) {
   final archive = ZipDecoder().decodeBytes(bytes);
+  // M5 防护：压缩炸弹检测。恶意 xlsx 可极小体积解压出海量/超大文件，
+  // 直接 OOM 或长时间占用。解压后立即校验条目数与单文件大小上限。
+  const maxFiles = 2000;
+  const maxFileSize = 50 * 1024 * 1024; // 50MB
+  if (archive.files.length > maxFiles) {
+    throw Exception('xlsx 内文件数过多（疑似压缩炸弹），已拒绝解析');
+  }
+  for (final f in archive.files) {
+    if (f.size > maxFileSize) {
+      throw Exception('xlsx 内存在超大文件（疑似压缩炸弹），已拒绝解析');
+    }
+  }
 
   // 提取所有文件内容
   final files = <String, String>{};

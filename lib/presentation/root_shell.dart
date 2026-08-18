@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -19,6 +21,9 @@ class RootShell extends ConsumerStatefulWidget {
 
 class _RootShellState extends ConsumerState<RootShell> {
   int _index = 0;
+
+  /// 分享流订阅（M6 修复：dispose 时取消，避免根组件重建时泄漏）。
+  StreamSubscription<List<SharedMediaFile>>? _mediaSub;
 
   static const _pages = [
     HomePage(),
@@ -42,9 +47,15 @@ class _RootShellState extends ConsumerState<RootShell> {
       ReceiveSharingIntent.instance.reset(); // 清除冷启动缓存，避免重复触发
     });
 
-    ReceiveSharingIntent.instance.getMediaStream().listen((files) {
+    _mediaSub = ReceiveSharingIntent.instance.getMediaStream().listen((files) {
       _consume(files, notifier);
     }, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    _mediaSub?.cancel();
+    super.dispose();
   }
 
   void _consume(List<SharedMediaFile> files, StateController<String?> notifier) {

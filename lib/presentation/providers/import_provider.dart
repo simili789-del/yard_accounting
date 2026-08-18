@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/job_types.dart';
@@ -10,7 +11,6 @@ import '../providers/app_settings_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/repository_providers.dart';
 import '../providers/selected_date_record_provider.dart';
-import '../providers/stats_provider.dart';
 
 /// 导入向导的 UI 状态。
 class ImportUiState {
@@ -114,7 +114,11 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
       importedCount: 0,
     );
     try {
-      final result = parseXlsx(path, sheetName: sheetName, headerRow: headerRow);
+      // M5：在独立 isolate 中解析 xlsx，避免大文件解析阻塞主线程（卡 UI）。
+      final result = await compute(
+        parseXlsxInIsolate,
+        (path, sheetName, headerRow),
+      );
 
       final names = result.rows.map((r) => normalize(r.workerName)).toSet();
       final repo = _ref.read(settingsRepositoryProvider);
@@ -284,8 +288,10 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     final records = <WorkRecord>[];
     for (final row in result.rows) {
       if (!keep(row)) continue;
-    // 备注连同原样导入（表格备注里写了什么就带什么），不做任何额外改写；
-    // 不再把「加班」列单独合并进备注——备注列本身已承载这些信息，避免重复处理。
+    // 备注连同原样导入（表格备注里写了什么就带什么）。
+    // 注：「加班」列的值已在 excel_importer 解析阶段并入 row.remark
+    // （末尾补『加班』关键字），与 OCR 对账"备注含『加班』即判加班"的约定一致，
+    // 因此此处直接透传 row.remark 即可，无需再处理加班列。
     final remark =
         (row.remark != null && row.remark!.isNotEmpty) ? row.remark : null;
       records.add(WorkRecord(
@@ -305,14 +311,10 @@ class ImportNotifier extends StateNotifier<ImportUiState> {
     await repo.saveImportedRecords(records);
 
     // 5) 刷新所有记录相关 Provider，让首页/明细页/月报页立刻反映新数据。
-    //    必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+    //    H2：失效全量快照根即可，所有派生 Provider（今日摘要/上次详情/明细/
+    //    月报等）自动级联失效；同时刷新独立维护表单态的 selectedDateRecordProvider。
     _ref.invalidate(allRecordsProvider);
-    _ref.invalidate(historyRecordsProvider);
-    _ref.invalidate(lastRecordProvider);
     _ref.invalidate(selectedDateRecordProvider);
-    _ref.invalidate(last7DaysSummaryProvider);
-    _ref.invalidate(monthlyStatsProvider);
-    _ref.invalidate(dayRecordsProvider);
 
     // 3) 作业类型同步后刷新联动
     _ref.read(unitPricesProvider.notifier).refresh();

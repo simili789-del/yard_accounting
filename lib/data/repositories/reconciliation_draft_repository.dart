@@ -13,11 +13,12 @@ class ReconciliationDraftRepository {
   Box get _box => Hive.box(boxName);
 
   Future<void> saveLatest({
-    required String? imagePath,
     required List<OcrLine> lines,
   }) async {
+    // L4 修复：不持久化 imagePath。image_picker 返回的是缓存目录临时文件，
+    // App 重启后即失效，存下也无法恢复显示；且 M2 解析对账只依赖识别出的
+    // 文本行（lines），与图片无关。故草稿仅保存行数据 + 时间戳。
     await _box.put(_key, {
-      'imagePath': imagePath,
       'createdAt': DateTime.now().toIso8601String(),
       'lines': lines.map((l) => l.toJson()).toList(),
     });

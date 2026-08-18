@@ -7,16 +7,26 @@ import '../../domain/entities/work_record.dart';
 import 'app_settings_provider.dart';
 import 'history_provider.dart';
 import 'repository_providers.dart';
-import 'stats_provider.dart';
 
 /// 首页当前选中的记账日期。
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
 /// 首页「上次作业详情」：取选中日期之前最近的一条记录。
+///
+/// H2 修复：改为从 [allRecordsProvider] 内存快照过滤，而非直接读 Hive。
+/// invalidate(allRecordsProvider) 会自动级联失效本 Provider，
+/// 消除写操作后需手写 invalidate 的脆弱失效链。
 final lastRecordProvider = FutureProvider<WorkRecord?>((ref) async {
-  final repo = ref.watch(recordRepositoryProvider);
+  final all = ref.watch(allRecordsProvider);
   final date = ref.watch(selectedDateProvider);
-  return repo.getLatestBefore(date);
+  final dayStart = DateTime(date.year, date.month, date.day);
+  WorkRecord? latest;
+  for (final r in all) {
+    if (r.date.isBefore(dayStart)) {
+      if (latest == null || r.date.isAfter(latest.date)) latest = r;
+    }
+  }
+  return latest;
 });
 
 /// 根据选中日期加载/保存记录。
@@ -48,13 +58,9 @@ class SelectedDateRecordNotifier
       final cur = state.value;
       if (cur == null) return;
       _repository.saveRecord(cur);
-      // 刷新聚合视图（今日摘要/上次详情/明细/月报），但不重建输入框状态。
+      // H2：只需失效全量快照根，所有派生 Provider（今日摘要/上次详情/明细/
+      // 月报等）会级联失效，无需再手写一长串 invalidate。
       _ref.invalidate(allRecordsProvider);
-      _ref.invalidate(dayRecordsProvider);
-      _ref.invalidate(lastRecordProvider);
-      _ref.invalidate(historyRecordsProvider);
-      _ref.invalidate(last7DaysSummaryProvider);
-      _ref.invalidate(monthlyStatsProvider);
     });
   }
 
@@ -168,12 +174,7 @@ class SelectedDateRecordNotifier
     await _repository.saveRecord(current);
     _undoStack.clear();
     state = AsyncData(current);
-    // 刷新所有依赖记录的聚合 Provider，使首页摘要/统计/明细/上次详情立即更新
-    _ref.invalidate(dayRecordsProvider);
-    _ref.invalidate(monthlyStatsProvider);
-    _ref.invalidate(historyRecordsProvider);
-    _ref.invalidate(lastRecordProvider);
-    _ref.invalidate(last7DaysSummaryProvider);
+    // H2：失效全量快照根即可，派生 Provider 自动级联刷新
     _ref.invalidate(allRecordsProvider);
   }
 }

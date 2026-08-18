@@ -138,13 +138,20 @@ final last7DaysSummaryProvider = Provider<Map<DateTime, List<WorkRecord>>>((ref)
 
 /// 某天的全部记录（含「今日记账」纯日期记录 + 当天所有 imp_ 导入记录），
 /// 用于首页「今日摘要」聚合展示——导入当天数据后摘要同步更新。
+///
+/// H2 修复：改为从 [allRecordsProvider] 内存快照过滤，而非直接读 Hive。
+/// 这样 invalidate(allRecordsProvider) 会自动级联失效本 Provider，
+/// 消除「写操作后需手写一长串 invalidate」的脆弱失效链，
+/// 同时避免首页每次 build 全量遍历 Hive 造成的性能浪费。
 final dayRecordsProvider =
     Provider.family<List<WorkRecord>, DateTime>((ref, date) {
-  final repository = ref.watch(recordRepositoryProvider);
+  final all = ref.watch(allRecordsProvider);
   final dayStart = DateTime(date.year, date.month, date.day);
   final dayEnd =
       DateTime(date.year, date.month, date.day, 23, 59, 59, 999, 999);
-  return repository.query(start: dayStart, end: dayEnd);
+  return all
+      .where((r) => !r.date.isBefore(dayStart) && !r.date.isAfter(dayEnd))
+      .toList();
 });
 
 /// 批量勾选待删除的记录 id 集合。

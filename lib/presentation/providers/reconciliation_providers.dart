@@ -5,8 +5,10 @@ import '../../data/repositories/ocr_repository.dart';
 import '../../data/repositories/reconciliation_draft_repository.dart';
 import '../../domain/entities/ocr_result.dart';
 
-/// 离线 OCR 引擎（应用生命周期内复用同一识别器，持有本地模型）。
-final ocrRepositoryProvider = Provider<OcrRepository>((ref) {
+/// 离线 OCR 引擎。M1 修复：使用 autoDispose，离开对账页时整棵对账 Provider 树
+/// 被销毁、TextRecognizer 的 close() 被调用，释放占用的中文 OCR 模型（native
+/// 资源，几十 MB）与相机/ML 相关资源——避免 App 启动即常驻内存、低配机吃紧。
+final ocrRepositoryProvider = Provider.autoDispose<OcrRepository>((ref) {
   final repo = OcrRepository();
   ref.onDispose(repo.dispose);
   return repo;
@@ -17,8 +19,9 @@ final reconciliationDraftRepositoryProvider =
   return ReconciliationDraftRepository();
 });
 
-final reconciliationStateProvider =
-    StateNotifierProvider<ReconciliationNotifier, ReconciliationState>((ref) {
+final reconciliationStateProvider = StateNotifierProvider.autoDispose<
+    ReconciliationNotifier,
+    ReconciliationState>((ref) {
   return ReconciliationNotifier(
     ref.watch(ocrRepositoryProvider),
     ref.watch(reconciliationDraftRepositoryProvider),
@@ -101,10 +104,8 @@ class ReconciliationNotifier extends StateNotifier<ReconciliationState> {
   }
 
   Future<void> saveDraft() async {
-    await _draft.saveLatest(
-      imagePath: state.imagePath,
-      lines: state.lines,
-    );
+    // L4：草稿只保存识别文本行（imagePath 不持久化，见 ReconciliationDraftRepository）。
+    await _draft.saveLatest(lines: state.lines);
     state = state.copyWith(saved: true);
   }
 

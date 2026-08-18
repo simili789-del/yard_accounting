@@ -140,9 +140,10 @@ class RecordSerialization {
     return records;
   }
 
-  /// 导出全量备份 JSON（记录 + 全部配置：单价/工资构成/应用设置/固定名单/导入模板）。
-  /// 恢复时整包写回，做到「换机零风险」。
-  static String toFullBackupJson(FullBackup backup) {
+  /// 构造全量备份的可序列化结构（记录 + 全部配置：单价/工资构成/应用设置/
+  /// 固定名单/导入模板）。恢复时整包写回，做到「换机零风险」。
+  /// 抽出为独立方法，便于在主线程廉价构造后交给 compute 做 jsonEncode（L2）。
+  static Map<String, dynamic> fullBackupPayload(FullBackup backup) {
     final settings = <String, dynamic>{};
     if (backup.jobPrices != null) settings['jobPrices'] = backup.jobPrices;
     if (backup.salarySettings != null) {
@@ -183,8 +184,12 @@ class RecordSerialization {
       'boatName': r.boatName,
       'yard': r.yard,
     }).toList();
-    return jsonEncode({'version': 2, 'records': recordList, 'settings': settings});
+    return {'version': 2, 'records': recordList, 'settings': settings};
   }
+
+  /// 导出全量备份 JSON 文本（供同步调用场景）。同等逻辑见 [fullBackupPayload]。
+  static String toFullBackupJson(FullBackup backup) =>
+      jsonEncode(fullBackupPayload(backup));
 
   /// 解析全量备份 JSON。兼容旧版（只有 records 或无 settings 字段）。
   static FullBackup parseFullBackup(String jsonStr) {
@@ -277,3 +282,7 @@ class RecordSerialization {
   }
 
 }
+
+/// 顶层函数：把已构造好的备份 payload 序列化为 JSON 字符串。
+/// 供 compute 在独立 isolate 中执行，避免多年数据构造超大 JSON 时阻塞主线程（L2）。
+String jsonEncodePayload(Map<String, dynamic> payload) => jsonEncode(payload);

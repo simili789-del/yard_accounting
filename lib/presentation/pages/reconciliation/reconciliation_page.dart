@@ -22,10 +22,32 @@ class _ReconciliationPageState extends ConsumerState<ReconciliationPage> {
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _pick(ImageSource source) async {
+    final prev = ref.read(reconciliationStateProvider).imagePath;
     final file = await _picker.pickImage(source: source, imageQuality: 90);
     if (file != null && context.mounted) {
       await ref.read(reconciliationStateProvider.notifier).recognize(file.path);
+      // L3：重新拍摄/选择后，上一轮的临时图片文件已不再使用，删除避免累积。
+      _deleteTemp(prev);
     }
+  }
+
+  /// 删除 image_picker 产生的缓存临时文件（若存在）。App 重启后也可能残留，
+  /// 离开对账页时在 dispose 中一并清理。
+  void _deleteTemp(String? p) {
+    if (p == null || p.isEmpty) return;
+    try {
+      final f = File(p);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {
+      // 忽略删除失败（文件可能已被系统清理）
+    }
+  }
+
+  @override
+  void dispose() {
+    // L3：离开对账页时清理当前临时图片文件。
+    _deleteTemp(ref.read(reconciliationStateProvider).imagePath);
+    super.dispose();
   }
 
   Future<void> _showPickSheet() async {

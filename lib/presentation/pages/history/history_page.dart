@@ -6,7 +6,6 @@ import '../../../domain/entities/work_record.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
-import '../../providers/stats_provider.dart';
 import '../../widgets/record_list_card.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/yard_app_bar.dart';
@@ -32,12 +31,8 @@ class HistoryPage extends ConsumerWidget {
                 await ref
                     .read(recordRepositoryProvider)
                     .deleteRecords(selected.toList());
-                // 批量删除后刷新全部记录相关 Provider（含首页今日记账），否则列表/首页残留旧数据
-                ref.invalidate(historyRecordsProvider);
-                ref.invalidate(last7DaysSummaryProvider);
-                ref.invalidate(monthlyStatsProvider);
-                ref.invalidate(lastRecordProvider);
-                ref.invalidate(dayRecordsProvider);
+                // 批量删除后刷新：失效全量快照根即可级联刷新所有派生 Provider（含首页今日记账）
+                ref.invalidate(allRecordsProvider);
                 ref.invalidate(selectedDateRecordProvider);
                 ref.read(selectedRecordIdsProvider.notifier).state = {};
               },
@@ -70,28 +65,18 @@ class HistoryPage extends ConsumerWidget {
                                   builder: (_) => EditRecordPage(record: r),
                                 ),
                               );
-                              // 编辑返回后刷新全部记录相关 Provider（含首页今日记账/统计），避免联动残留。
-                              // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+                              // 编辑返回后刷新全部记录相关 Provider（含首页今日记账/统计）。
+                              // H2：失效全量快照根即可级联刷新所有派生 Provider。
                               ref.invalidate(allRecordsProvider);
-                              ref.invalidate(historyRecordsProvider);
-                              ref.invalidate(last7DaysSummaryProvider);
-                              ref.invalidate(monthlyStatsProvider);
-                              ref.invalidate(lastRecordProvider);
-                              ref.invalidate(dayRecordsProvider);
                               ref.invalidate(selectedDateRecordProvider);
                             },
                             onDelete: () async {
                               await ref
                                   .read(recordRepositoryProvider)
                                   .deleteRecords([r.id]);
-                              // 删除后刷新所有记录相关 Provider（含首页今日记账），否则 UI 残留旧数据。
-                              // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+                              // 删除后刷新所有记录相关 Provider（含首页今日记账）。
+                              // H2：失效全量快照根即可级联刷新所有派生 Provider。
                               ref.invalidate(allRecordsProvider);
-                              ref.invalidate(historyRecordsProvider);
-                              ref.invalidate(last7DaysSummaryProvider);
-                              ref.invalidate(monthlyStatsProvider);
-                              ref.invalidate(lastRecordProvider);
-                              ref.invalidate(dayRecordsProvider);
                               ref.invalidate(selectedDateRecordProvider);
                             },
                           ))

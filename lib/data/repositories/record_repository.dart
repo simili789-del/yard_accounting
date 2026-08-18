@@ -132,12 +132,6 @@ class RecordRepository {
     await _box.deleteAll(ids);
   }
 
-  /// “复制昨日”：拉取昨日记录的作业数据，套用到今日草稿。
-  Future<WorkRecord?> getYesterdayRecord() async {
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    return _box.get(_dateKey(yesterday));
-  }
-
   /// 按日期范围 + 关键词（姓名/车号）查询明细。
   List<WorkRecord> query({
     DateTime? start,
@@ -162,7 +156,9 @@ class RecordRepository {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  List<WorkRecord> get all => _box.values.toList();
+  /// 全量记录在内存中的快照（供快照根 [allRecordsProvider] 使用）。
+  /// L1 修复：与 [getAllRecords] 实现相同，改为委托，消除重复定义。
+  List<WorkRecord> get all => getAllRecords();
 
   /// 取指定日期之前「最近的一条」记录，用于首页展示上次作业详情。
   WorkRecord? getLatestBefore(DateTime date) {
@@ -192,12 +188,17 @@ class RecordRepository {
   Future<void> clearAllRecords() async => _box.clear();
 
   /// 写入 3 条示例记录（当前月），便于初次体验。
+  /// M3 修复：改用真实作业类型（货场装车/外倒装车/火车装车…），
+  /// 避免金额全算 0、冒出"装车/卸车/倒短/归垛"等幽灵类型。
   Future<void> seedSampleData() async {
     final now = DateTime.now();
     final samples = [
-      _sample(now, 0, '张三', '鲁B12345', ShiftType.day, {'装车': 50, '卸车': 30}, '示例数据'),
-      _sample(now, 1, '李四', '鲁B67890', ShiftType.night, {'倒短': 40}, '示例数据'),
-      _sample(now, 2, '王五', '鲁B11111', ShiftType.day, {'归垛': 60}, '示例数据'),
+      _sample(now, 0, '张三', '鲁B12345', ShiftType.day,
+          {'货场装车': 50, '货场归剁': 20}, '示例数据'),
+      _sample(now, 1, '李四', '鲁B67890', ShiftType.night,
+          {'外倒装车': 30, '内倒装车': 25}, '示例数据'),
+      _sample(now, 2, '王五', '鲁B11111', ShiftType.day,
+          {'内倒归垛': 40, '火车装车': 5}, '示例数据'),
     ];
     for (final s in samples) {
       await _box.put(s.id, s);

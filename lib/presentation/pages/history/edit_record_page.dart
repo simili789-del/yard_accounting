@@ -7,7 +7,6 @@ import '../../../domain/entities/work_record.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/repository_providers.dart';
 import '../../providers/selected_date_record_provider.dart';
-import '../../providers/stats_provider.dart';
 import '../../widgets/job_type_card.dart';
 
 /// 编辑历史记录页面：可修改姓名/车号/班次/作业数量/备注，保存回 Hive。
@@ -195,13 +194,8 @@ class _EditRecordPageState extends ConsumerState<EditRecordPage> {
     await ref.read(recordRepositoryProvider).putRecord(updated);
     if (!mounted) return;
     // 编辑保存后刷新全部记录相关 Provider，确保统计/今日摘要/近7天同步更新。
-    // 必须先失效 allRecordsProvider（全量快照根），否则依赖它的 Provider 仍读旧缓存。
+    // H2：失效全量快照根即可级联刷新所有派生 Provider。
     ref.invalidate(allRecordsProvider);
-    ref.invalidate(historyRecordsProvider);
-    ref.invalidate(last7DaysSummaryProvider);
-    ref.invalidate(monthlyStatsProvider);
-    ref.invalidate(lastRecordProvider);
-    ref.invalidate(dayRecordsProvider);
     ref.invalidate(selectedDateRecordProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已保存修改')),
