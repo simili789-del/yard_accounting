@@ -14,6 +14,7 @@ import '../../widgets/section_header.dart';
 import '../../widgets/stat_card.dart';
 import '../../widgets/yard_app_bar.dart';
 import '../../pages/import/import_wizard_page.dart';
+import '../../pages/reconciliation/reconciliation_page.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -38,6 +39,16 @@ class HomePage extends ConsumerWidget {
                       builder: (_) => ImportWizardPage(filePath: path)),
                 );
               }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined),
+            tooltip: '月报对账',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const ReconciliationPage()),
+              );
             },
           ),
         ],

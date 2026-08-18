@@ -45,6 +45,7 @@ Future<void> main() async {
       Hive.openBox<SalarySettings>(HiveBoxes.salarySettings),
       Hive.openBox(HiveBoxes.appSettings),
       Hive.openBox<AppSettings>(HiveBoxes.appSettingsV2),
+      Hive.openBox('reconciliation_drafts'), // 对账识别草稿（非类型化，存 JSON）
     ]);
 
     // 首次启动：初始化默认作业类型单价（box 为空时写入）
